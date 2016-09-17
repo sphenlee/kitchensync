@@ -22,11 +22,14 @@ fn main() {
 }
 
 fn do_update<'a>(args: &clap::ArgMatches<'a>) {
-    println!("update {:?}", args);
+    println!("# updating");
 
-    let store = Store::read(".ksync");
+    let mut store = Store::read(".ksync");
     let files = update::get_files(".");
 
-    println!("{:?}", store);
-    println!("{:?}", files.len());
+    update::update_store(&mut store, &files);
+
+    store.write_to_file(".ksync");
+
+    println!("# update successful");
 }
