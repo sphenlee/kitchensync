@@ -1,0 +1,12 @@
+[package]
+name = "kitchensync"
+version = "0.1.0"
+authors = ["Stephen Lee <sphen.lee@gmail.com>"]
+
+[dependencies]
+clap = "2"
+walkdir = "0.1.8"
+
+[[bin]]
+name = "kitchensync"
+path = "main.rs"
