@@ -2,7 +2,7 @@ extern crate walkdir;
 
 use self::walkdir::{WalkDir, DirEntry, WalkDirIterator};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 
@@ -36,6 +36,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> Vec<FileStat> {
         .into_iter()
         .filter_entry(|e| !is_hidden(e))
         .map(|entry| entry.unwrap())
+        .filter(|entry| entry.file_name() != ".")
         .map(|entry| {
             let name = entry.path().into();
             let meta = entry.metadata().unwrap();

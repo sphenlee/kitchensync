@@ -6,6 +6,8 @@ authors = ["Stephen Lee <sphen.lee@gmail.com>"]
 [dependencies]
 clap = "2"
 walkdir = "0.1.8"
+url = "1.2.0"
+sha1 = "0.2.0"
 
 [[bin]]
 name = "kitchensync"
