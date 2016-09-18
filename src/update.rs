@@ -1,10 +1,13 @@
 extern crate walkdir;
+extern crate sha1;
 
 use self::walkdir::{WalkDir, DirEntry, WalkDirIterator};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
+use std::fs::File;
+use std::io::Read;
 
 use store::{Store, StoreItem};
 
@@ -48,10 +51,25 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> Vec<FileStat> {
         .collect()
 }
 
+fn get_sha1(name: &Path) -> String {
+    let mut h = sha1::Sha1::new();
+    let mut fp = File::open(name).unwrap();
+    let mut buf = [0u8; 4096];
+
+    loop {
+        let read = fp.read(&mut buf).unwrap();
+        if read == 0 {
+            break;
+        }
+        h.update(&buf[..read]);
+    }
+
+    h.digest().to_string()
+}
+
 fn added_file(filestat: &FileStat) -> StoreItem {
-    // compute a SHA1 here
     StoreItem {
-        sha: "sha1".to_owned(),
+        sha: get_sha1(&filestat.name),
         timestamp: filestat.timestamp
     }
 }
@@ -60,11 +78,15 @@ fn compare_file(existing: &StoreItem, filestat: &FileStat) -> Option<StoreItem> 
     if existing.timestamp == filestat.timestamp {
         None
     } else {
-        // grab a sha here and compare them
-        Some(StoreItem {
-            sha: "sha1".to_owned(),
-            timestamp: filestat.timestamp
-        })
+        let sha = get_sha1(&filestat.name);
+        if existing.sha == sha {
+            None
+        } else {
+            Some(StoreItem {
+                sha: sha,
+                timestamp: filestat.timestamp
+            })
+        }
     }
 }
 

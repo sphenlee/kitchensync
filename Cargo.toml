@@ -11,4 +11,3 @@ sha1 = "0.2.0"
 
 [[bin]]
 name = "kitchensync"
-path = "main.rs"
