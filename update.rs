@@ -2,7 +2,7 @@ extern crate walkdir;
 
 use self::walkdir::{WalkDir, DirEntry, WalkDirIterator};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 
@@ -11,7 +11,17 @@ use store::{Store, StoreItem};
 #[derive(Debug)]
 pub struct FileStat {
     name: PathBuf,
-    timestamp: SystemTime
+    timestamp: u64
+}
+
+/*fn timestamp_from_str(s: &str) -> SystemTime {
+    let ts: u64 = s.parse().unwrap();
+    UNIX_EPOCH + Duration::from_secs(ts)
+}*/
+
+fn systemtime_to_u64(t: SystemTime) -> u64 {
+    let dur = t.duration_since(UNIX_EPOCH).unwrap();
+    dur.as_secs()
 }
 
 fn is_hidden(entry: &DirEntry) -> bool {
@@ -31,7 +41,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> Vec<FileStat> {
             let meta = entry.metadata().unwrap();
             FileStat {
                 name: name,
-                timestamp: meta.modified().unwrap()
+                timestamp: systemtime_to_u64(meta.modified().unwrap())
             }
         })
         .collect()

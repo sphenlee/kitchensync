@@ -7,24 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH, Duration};
 #[derive(Debug)]
 pub struct StoreItem {
     pub sha: String,
-    pub timestamp: SystemTime
-}
-/*
-impl StoreItem {
-    pub fn new(sha: String, ts: SystemTime) {
-        StoreItem{sha: sha, timestamp: ts}
-    }
-}
-*/
-
-fn timestamp_from_str(s: &str) -> SystemTime {
-    let ts: u64 = s.parse().unwrap();
-    UNIX_EPOCH + Duration::from_secs(ts)
-}
-
-fn timestamp_to_str(t: SystemTime) -> String {
-    let dur = t.duration_since(UNIX_EPOCH).unwrap();
-    dur.as_secs().to_string()
+    pub timestamp: u64
 }
 
 fn read_one_line(line: String) -> (PathBuf, StoreItem) {
@@ -32,7 +15,7 @@ fn read_one_line(line: String) -> (PathBuf, StoreItem) {
     let name: PathBuf = parts[2].into();
     let item = StoreItem {
         sha: parts[0].to_owned(),
-        timestamp: timestamp_from_str(parts[1])
+        timestamp: parts[1].parse().unwrap()
     };
     (name, item)
 }
@@ -78,7 +61,7 @@ impl Store {
         for (ref name, ref item) in self.files.iter() {
             let line = format!("{} {} {}\n",
                 item.sha,
-                timestamp_to_str(item.timestamp),
+                item.timestamp,
                 name.to_str().unwrap());
             
             out.write_all(line.as_ref()).unwrap();
