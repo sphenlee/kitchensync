@@ -7,7 +7,7 @@ Test basic functionality of the sync command
 
   $ echo hello > hello
   $ echo world > world
-  
+
   $ kitchensync update
   # updating
   A ./hello
@@ -31,8 +31,9 @@ Now sync to a new directory
 Make a change in a and sync again
 
   $ cd ../a
+  $ sleep 1
   $ echo "hello world" > hello
-  
+
   $ kitchensync update
   # updating
   U ./hello

@@ -70,11 +70,14 @@ fn do_sync<'a>(args: &clap::ArgMatches<'a>) {
 
     println!("# syncing from {}", loc);
 
-    remote.get(KSYNC, Path::new(KSYNCREMOTE));
+    let ksync = Path::new(KSYNC);
+    let ksyncremote = Path::new(KSYNCREMOTE);
+
+    remote.get(ksync, ksyncremote);
 
     // read both stores
-    let lstore = Store::read(KSYNC);
-    let rstore = Store::read(KSYNCREMOTE);
+    let lstore = Store::read(ksync);
+    let rstore = Store::read(ksyncremote);
 
     //println!("LOCAL {:?}", lstore);
     //println!("REMOTE {:?}", rstore);
@@ -90,14 +93,13 @@ fn do_sync<'a>(args: &clap::ArgMatches<'a>) {
     if args.is_present("dry-run") {
         sync::show_actions(actions);
     } else {
-        sync::show_actions(actions);
-        //sync::perform_actions(actions);
-    
+        sync::perform_actions(actions, &mut remote);
+        
         if push {
-            remote.put(KSYNC, Path::new(KSYNC));
-            fs::remove_file(KSYNCREMOTE).unwrap();
+            remote.put(ksync, ksync);
+            fs::remove_file(ksyncremote).unwrap();
         } else {
-            fs::rename(KSYNCREMOTE, KSYNC).unwrap();
+            fs::rename(ksyncremote, ksync).unwrap();
         }
     }
 

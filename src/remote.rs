@@ -47,8 +47,8 @@ impl From<ParseError> for RemoteError {
 // The Remote trait
 
 pub trait Remote {
-    fn get(&mut self, name: &str, dest: &Path) -> io::Result<()>;
-    fn put(&mut self, name: &str, src: &Path) -> io::Result<()>;
+    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()>;
+    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()>;
 }
 
 pub fn from_location(location: &str) -> Result<Box<Remote>, RemoteError> {
@@ -90,8 +90,8 @@ impl FileRemote {
 }
 
 impl Remote for FileRemote {
-    fn get(&mut self, name: &str, dest: &Path) -> io::Result<()> {
-        println!("get {:?} -> {:?}", self.root.join(name), dest);
+    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
+        //println!("get {:?} -> {:?}", self.root.join(name), dest);
 
         let mut sink = try!(File::create(dest));
         let mut src = try!(File::open(self.root.join(name)));
@@ -101,8 +101,8 @@ impl Remote for FileRemote {
         Ok(())
     }
 
-    fn put(&mut self, name: &str, src: &Path) -> io::Result<()> {
-        println!("put {:?} -> {}", src, name);
+    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
+        //println!("put {:?} -> {:?}", src, name);
 
         let mut sink = try!(File::create(self.root.join(name)));
         let mut src = try!(File::open(src));

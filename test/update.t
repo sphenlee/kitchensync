@@ -18,6 +18,7 @@ Initial update
 
 Touch a file
 
+  $ sleep 1
   $ echo "hello world" > hello
   $ kitchensync update
   # updating
