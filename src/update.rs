@@ -4,8 +4,8 @@ extern crate sha1;
 use self::walkdir::{WalkDir, DirEntry, WalkDirIterator};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::collections::HashSet;
-use std::collections::hash_map::Entry;
+use std::collections::BTreeSet;
+use std::collections::btree_map::Entry;
 use std::fs::File;
 use std::io::Read;
 
@@ -39,7 +39,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> Vec<FileStat> {
         .into_iter()
         .filter_entry(|e| !is_hidden(e))
         .map(|entry| entry.unwrap())
-        .filter(|entry| entry.file_name() != ".")
+        .filter(|entry| entry.file_type().is_file())
         .map(|entry| {
             let name = entry.path().into();
             let meta = entry.metadata().unwrap();
@@ -91,7 +91,7 @@ fn compare_file(existing: &StoreItem, filestat: &FileStat) -> Option<StoreItem> 
 }
 
 pub fn update_store(store: &mut Store, files: &Vec<FileStat>) {
-    let mut allfiles: HashSet<PathBuf> = {
+    let mut allfiles: BTreeSet<PathBuf> = {
         store.files.keys().cloned().collect()
     };
 

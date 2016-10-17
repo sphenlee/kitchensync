@@ -30,7 +30,7 @@ Now sync to a new directory
   $ cat hello
   hello
 
-Make a change in a and sync again
+Make a change in a and update
 
   $ cd ../a
   $ echo "hello world" > hello
@@ -41,7 +41,16 @@ Make a change in a and sync again
   U ./hello
   # update successful
 
+Dry run sync
+
   $ cd ../b
+  $ kitchensync sync --dry-run ../a
+  # syncing from ../a
+  U ./hello
+  # sync successful
+
+Real sync
+
   $ kitchensync sync ../a
   # syncing from ../a
   U ./hello

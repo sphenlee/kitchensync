@@ -1,5 +1,5 @@
 use std::io::{BufReader, BufRead, Write};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -21,13 +21,13 @@ fn read_one_line(line: String) -> (PathBuf, StoreItem) {
 
 #[derive(Debug)]
 pub struct Store {
-    pub files: HashMap<PathBuf, StoreItem>
+    pub files: BTreeMap<PathBuf, StoreItem>
 }
 
 impl Store {
     pub fn empty() -> Store {
         Store {
-            files: HashMap::new()
+            files: BTreeMap::new()
         }
     }
 

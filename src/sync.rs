@@ -2,7 +2,7 @@ use store::{Store, StoreItem};
 use remote::Remote;
 
 use std::path::PathBuf;
-use std::collections::{HashSet, HashMap};
+use std::collections::{BTreeSet, BTreeMap};
 use std::fs;
 
 #[derive(Debug)]
@@ -29,8 +29,8 @@ impl Action {
 struct SyncState<'a> {
     src: &'a Store,
     dest: &'a Store,
-    allfiles: HashSet<&'a PathBuf>,
-    shamap: HashMap<String, &'a PathBuf>
+    allfiles: BTreeSet<&'a PathBuf>,
+    shamap: BTreeMap<String, &'a PathBuf>
 }
 
 impl<'a> SyncState<'a> {

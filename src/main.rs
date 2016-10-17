@@ -85,9 +85,9 @@ fn do_sync<'a>(args: &clap::ArgMatches<'a>) {
     // compare the stores
     let push = args.is_present("push");
     let actions = if push {
-        sync::get_actions(rstore, lstore) // get_actions takes destination then source
+        sync::get_actions(&rstore, &lstore) // get_actions takes destination then source
     } else {
-        sync::get_actions(lstore, rstore)
+        sync::get_actions(&lstore, &rstore)
     };
 
     if args.is_present("dry-run") {
