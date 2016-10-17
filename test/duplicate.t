@@ -1,4 +1,4 @@
-Test basic functionality of the sync command
+Test duplicating files
 
   $ kitchensync() { RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
 
@@ -6,14 +6,11 @@ Test basic functionality of the sync command
   $ cd a
 
   $ echo hello > hello
-  $ echo world > world
   $ touch -d 0 hello
-  $ touch -d 0 world
 
   $ kitchensync update
   # updating
   A ./hello
-  A ./world
   # update successful
 
 Now sync to a new directory
@@ -24,43 +21,32 @@ Now sync to a new directory
   $ kitchensync sync ../a
   # syncing from ../a
   A ./hello
-  A ./world
   # sync successful
 
   $ cat hello
   hello
 
-Make a change in a and sync again
+Move a file and sync again
 
   $ cd ../a
-  $ echo "hello world" > hello
-  $ touch -d 1 hello
+  $ mv hello world
 
   $ kitchensync update
   # updating
-  U ./hello
+  A ./world
+  D ./hello
   # update successful
 
   $ cd ../b
   $ kitchensync sync ../a
   # syncing from ../a
-  U ./hello
+  U ./world
+  # copying from ./hello
+  R ./hello
   # sync successful
 
-  $ cat hello
-  hello world
+  $ cat world
+  hello
 
-Test deleting files
-
-  $ cd ../a
-  $ rm world
-  $ kitchensync update
-  # updating
-  D ./world
-  # update successful
-
-  $ cd ../b
-  $ kitchensync sync ../a
-  # syncing from ../a
-  R ./world
-  # sync successful
+  $ test -f hello
+  [1]

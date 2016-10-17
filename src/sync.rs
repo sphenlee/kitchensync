@@ -2,69 +2,117 @@ use store::{Store, StoreItem};
 use remote::Remote;
 
 use std::path::PathBuf;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::fs;
 
 #[derive(Debug)]
 pub enum Action {
     Add,
     Remove,
-    Duplicate(String),
+    Duplicate(PathBuf),
     Touch,
     Update
 }
 
-fn get_code(action: &Action) -> char {
-    match *action {
-        Action::Add => 'A',
-        Action::Remove => 'R',
-        Action::Touch => 'T',
-        Action::Duplicate(_) => 'U',
-        Action::Update => 'U'
+impl Action {
+    fn get_code(&self) -> char {
+        match *self {
+            Action::Add => 'A',
+            Action::Remove => 'R',
+            Action::Touch => 'T',
+            Action::Duplicate(_) => 'U',
+            Action::Update => 'U'
+        }
     }
 }
 
-fn compare_items(sitem: &StoreItem, ditem: &StoreItem) -> Option<Action> {
-    if sitem.sha != ditem.sha {
-        Some(Action::Update)
-    } else if sitem.timestamp != ditem.timestamp {
-        Some(Action::Touch)
-    } else {
-        None
-    }
+struct SyncState<'a> {
+    src: &'a Store,
+    dest: &'a Store,
+    allfiles: HashSet<&'a PathBuf>,
+    shamap: HashMap<String, &'a PathBuf>
 }
 
-pub fn get_actions<'a>(dest: &'a Store, src: &'a Store) -> Vec<(&'a PathBuf, Action)> {
-    let mut allfiles: HashSet<&'a PathBuf> = {
-        dest.files.keys().collect()
-    };
+impl<'a> SyncState<'a> {
+    fn new(dest: &'a Store, src: &'a Store) -> SyncState<'a> {
+        let allfiles = {
+            dest.files.keys().collect()
+        };
 
-    let mut actions: Vec<_> = src.files.iter()
-        .flat_map(|(name, sitem)| {
-            allfiles.remove(name);
+        let shamap = {
+            dest.files.iter().map(|(name, item)| (item.sha.clone(), name)).collect()
+        };
 
-            match dest.files.get(name) {
-                None => {
-                    Some((name, Action::Add))
-                },
-                Some(ref ditem) => {
-                    compare_items(&sitem, &ditem).map(|action| (name, action))
-                }
+        SyncState {
+            src: src,
+            dest: dest,
+            allfiles: allfiles,
+            shamap: shamap
+        }
+    }
+
+    fn check_duplicate(&mut self, name: &PathBuf, sha: &String) -> Option<PathBuf> {
+        self.shamap.get(sha).and_then(|p| {
+            if *p == name {
+                None
+            } else {
+                Some((*p).clone())
             }
         })
-        .collect();
+    }
 
-    actions.extend(allfiles.into_iter().map(|name| {
-        (name, Action::Remove)
-    }));
+    fn compare_items(&mut self, name: &PathBuf, sitem: &StoreItem, ditem: &StoreItem) -> Option<Action> {
+        if sitem.sha != ditem.sha {
+            Some(self.check_duplicate(name, &sitem.sha).map_or(
+                Action::Update,
+                |dupname| Action::Duplicate(dupname)
+            ))
+        } else if sitem.timestamp != ditem.timestamp {
+            Some(Action::Touch)
+        } else {
+            None
+        }
+    }
 
-    actions
+    fn diff_stores(mut self) -> Vec<(&'a PathBuf, Action)> {
+        let mut actions: Vec<_> = self.src.files.iter()
+            .flat_map(|(name, sitem)| {
+                self.allfiles.remove(name);
+
+                match self.dest.files.get(name) {
+                    None => {
+                        Some(self.check_duplicate(&name, &sitem.sha).map_or(
+                            Action::Add,
+                            |name| Action::Duplicate(name)
+                        ))
+                    },
+                    Some(ref ditem) => {
+                        self.compare_items(&name, &sitem, &ditem)
+                    }
+                }.map(|action| (name, action))
+            })
+            .collect();
+
+        actions.extend(self.allfiles.into_iter().map(|name| {
+            (name, Action::Remove)
+        }));
+
+        actions
+    }
+}
+
+
+
+pub fn get_actions<'a>(dest: &'a Store, src: &'a Store) -> Vec<(&'a PathBuf, Action)> {
+    let state = SyncState::new(dest, src);
+
+    state.diff_stores()
 }
 
 pub fn show_actions<'a>(actions: Vec<(&'a PathBuf, Action)>) {
     for (name, action) in actions {
         println!("{} {}",
-            get_code(&action),
+            action.get_code(),
             name.to_string_lossy());
     }
 }
@@ -72,7 +120,7 @@ pub fn show_actions<'a>(actions: Vec<(&'a PathBuf, Action)>) {
 pub fn perform_actions<'a>(actions: Vec<(&'a PathBuf, Action)>, remote: &mut Box<Remote>) {
     for (name, action) in actions {
         println!("{} {}",
-            get_code(&action),
+            action.get_code(),
             name.to_string_lossy());
 
         match action {
@@ -86,8 +134,10 @@ pub fn perform_actions<'a>(actions: Vec<(&'a PathBuf, Action)>, remote: &mut Box
             Action::Touch => {
                 // touch the file here
             },
-            Action::Duplicate(_) => {
-                // copy the file here
+            Action::Duplicate(ref src) => {
+                println!("# copying from {}", src.to_string_lossy());
+                // TODO actually duplicate the local file
+                remote.get(&name, &name);  
             }
         };
     }    

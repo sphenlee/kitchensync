@@ -7,6 +7,8 @@ Tests basic functionality of the update command
 
   $ echo hello > hello
   $ echo world > world
+  $ touch -d 0 hello
+  $ touch -d 0 world
 
 Initial update
 
@@ -18,8 +20,9 @@ Initial update
 
 Touch a file
 
-  $ sleep 1
   $ echo "hello world" > hello
+  $ touch -d 1 hello
+
   $ kitchensync update
   # updating
   U ./hello
