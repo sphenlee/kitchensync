@@ -17,11 +17,6 @@ pub struct FileStat {
     timestamp: u64
 }
 
-/*fn timestamp_from_str(s: &str) -> SystemTime {
-    let ts: u64 = s.parse().unwrap();
-    UNIX_EPOCH + Duration::from_secs(ts)
-}*/
-
 fn systemtime_to_u64(t: SystemTime) -> u64 {
     let dur = t.duration_since(UNIX_EPOCH).unwrap();
     dur.as_secs()
@@ -70,55 +65,46 @@ fn get_sha1(name: &Path) -> String {
 fn added_file(filestat: &FileStat) -> StoreItem {
     StoreItem {
         sha: get_sha1(&filestat.name),
-        timestamp: filestat.timestamp
+        timestamp: filestat.timestamp,
+        seen: true
     }
 }
 
-fn compare_file(existing: &StoreItem, filestat: &FileStat) -> Option<StoreItem> {
-    if existing.timestamp == filestat.timestamp {
-        None
-    } else {
+fn compare_file(existing: &mut StoreItem, filestat: &FileStat) {
+    existing.seen = true;
+
+    if existing.timestamp != filestat.timestamp {
         let sha = get_sha1(&filestat.name);
-        if existing.sha == sha {
-            None
-        } else {
-            Some(StoreItem {
-                sha: sha,
-                timestamp: filestat.timestamp
-            })
+        if existing.sha != sha {
+            println!("U {}", filestat.name.to_string_lossy());
+            existing.sha = sha;
+            existing.timestamp = filestat.timestamp;
         }
     }
 }
 
-pub fn update_store(store: &mut Store, files: &Vec<FileStat>) {
-    let mut allfiles: BTreeSet<PathBuf> = {
-        store.files.keys().cloned().collect()
-    };
-
+pub fn update_store(mut store: Store, files: Vec<FileStat>) -> Store {
     for filestat in files {
-        allfiles.remove(&filestat.name);
-
         //println!("# {}", filestat.name.to_string_lossy());
 
-        match store.files.entry(filestat.name.clone()) {
+        match store.files_mut().entry(filestat.name.clone()) {
             Entry::Vacant(entry) => {
-                println!("A {}", filestat.name.to_string_lossy());
+                println!("A {}", entry.key().to_string_lossy());
                 entry.insert(added_file(&filestat));
             },
-            Entry::Occupied(mut entry) => {
-                let newitem = {
-                    compare_file(&entry.get(), &filestat)
-                };
-                if let Some(item) = newitem {
-                    println!("U {}", filestat.name.to_string_lossy());
-                    entry.insert(item);
-                };
+            Entry::Occupied(entry) => {
+                compare_file(entry.into_mut(), &filestat);
             }
         };
     }
 
-    for path in allfiles {
-        println!("D {}", path.to_string_lossy());
-        store.files.remove(&path);
+    for (name, item) in store.files().iter() {
+        if !item.seen {
+            println!("D {}", name.to_string_lossy());
+        }
     }
+
+    store.into_iter()
+        .filter(|&(ref _path, ref item)| item.seen)
+        .collect::<Store>()
 }

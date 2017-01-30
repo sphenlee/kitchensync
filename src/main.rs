@@ -52,12 +52,15 @@ fn main() {
 fn do_update<'a>(args: &clap::ArgMatches<'a>) {
     println!("# updating");
 
-    let mut store = Store::read(KSYNC);
+    let store = Store::read(KSYNC);
+
+    println!("# getting files");
     let files = update::get_files(".");
 
-    update::update_store(&mut store, &files);
+    println!("# looking for changes");
+    let updated_store = update::update_store(store, files);
 
-    store.write_to_file(KSYNC);
+    updated_store.write_to_file(KSYNC);
 
     println!("# update successful");
 }
@@ -85,9 +88,9 @@ fn do_sync<'a>(args: &clap::ArgMatches<'a>) {
     // compare the stores
     let push = args.is_present("push");
     let actions = if push {
-        sync::get_actions(&rstore, &lstore) // get_actions takes destination then source
+        sync::get_actions(rstore, lstore) // get_actions takes destination then source
     } else {
-        sync::get_actions(&lstore, &rstore)
+        sync::get_actions(lstore, rstore)
     };
 
     if args.is_present("dry-run") {
