@@ -9,9 +9,9 @@ Test duplicating files
   $ touch -d 0 hello
 
   $ kitchensync update
-  # updating
+  updating
   A ./hello
-  # update successful
+  update successful
 
 Now sync to a new directory
 
@@ -19,9 +19,9 @@ Now sync to a new directory
   $ cd ../b
 
   $ kitchensync sync ../a
-  # syncing from ../a
+  syncing from ../a
   A ./hello
-  # sync successful
+  sync successful
 
   $ cat hello
   hello
@@ -32,18 +32,18 @@ Move a file and sync again
   $ mv hello world
 
   $ kitchensync update
-  # updating
+  updating
   A ./world
   D ./hello
-  # update successful
+  update successful
 
   $ cd ../b
   $ kitchensync sync ../a
-  # syncing from ../a
+  syncing from ../a
   U ./world
-  # copying from ./hello
+  copying from ./hello
   R ./hello
-  # sync successful
+  sync successful
 
   $ cat world
   hello

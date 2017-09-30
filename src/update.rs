@@ -4,12 +4,12 @@ extern crate sha1;
 use self::walkdir::{WalkDir, DirEntry, WalkDirIterator};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::collections::BTreeSet;
 use std::collections::btree_map::Entry;
 use std::fs::File;
 use std::io::Read;
 
 use store::{Store, StoreItem};
+use super::KResult;
 
 #[derive(Debug)]
 pub struct FileStat {
@@ -29,8 +29,8 @@ fn is_hidden(entry: &DirEntry) -> bool {
          .unwrap_or(false)
 }
 
-pub fn get_files<P: AsRef<Path>>(root: P) -> Vec<FileStat> {
-    WalkDir::new(root)
+pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
+    Ok(WalkDir::new(root)
         .into_iter()
         .filter_entry(|e| !is_hidden(e))
         .map(|entry| entry.unwrap())
@@ -43,57 +43,59 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> Vec<FileStat> {
                 timestamp: systemtime_to_u64(meta.modified().unwrap())
             }
         })
-        .collect()
+        .collect())
 }
 
-fn get_sha1(name: &Path) -> String {
+fn get_sha1(name: &Path) -> KResult<String> {
     let mut h = sha1::Sha1::new();
-    let mut fp = File::open(name).unwrap();
+    let mut fp = File::open(name)?;
     let mut buf = [0u8; 4096];
 
     loop {
-        let read = fp.read(&mut buf).unwrap();
+        let read = fp.read(&mut buf)?;
         if read == 0 {
             break;
         }
         h.update(&buf[..read]);
     }
 
-    h.digest().to_string()
+    Ok(h.digest().to_string())
 }
 
-fn added_file(filestat: &FileStat) -> StoreItem {
-    StoreItem {
-        sha: get_sha1(&filestat.name),
+fn added_file(filestat: &FileStat) -> KResult<StoreItem> {
+    Ok(StoreItem {
+        sha: get_sha1(&filestat.name)?,
         timestamp: filestat.timestamp,
         seen: true
-    }
+    })
 }
 
-fn compare_file(existing: &mut StoreItem, filestat: &FileStat) {
+fn compare_file(existing: &mut StoreItem, filestat: &FileStat) -> KResult<()> {
     existing.seen = true;
 
     if existing.timestamp != filestat.timestamp {
-        let sha = get_sha1(&filestat.name);
+        let sha = get_sha1(&filestat.name)?;
         if existing.sha != sha {
             println!("U {}", filestat.name.to_string_lossy());
             existing.sha = sha;
             existing.timestamp = filestat.timestamp;
         }
     }
+
+    Ok(())
 }
 
-pub fn update_store(mut store: Store, files: Vec<FileStat>) -> Store {
+pub fn update_store(mut store: Store, files: Vec<FileStat>) -> KResult<Store> {
     for filestat in files {
         //println!("# {}", filestat.name.to_string_lossy());
 
         match store.files_mut().entry(filestat.name.clone()) {
             Entry::Vacant(entry) => {
                 println!("A {}", entry.key().to_string_lossy());
-                entry.insert(added_file(&filestat));
+                entry.insert(added_file(&filestat)?);
             },
             Entry::Occupied(entry) => {
-                compare_file(entry.into_mut(), &filestat);
+                compare_file(entry.into_mut(), &filestat)?;
             }
         };
     }
@@ -104,7 +106,7 @@ pub fn update_store(mut store: Store, files: Vec<FileStat>) -> Store {
         }
     }
 
-    store.into_iter()
+    Ok(store.into_iter()
         .filter(|&(ref _path, ref item)| item.seen)
-        .collect::<Store>()
+        .collect::<Store>())
 }

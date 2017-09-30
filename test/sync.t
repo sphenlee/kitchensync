@@ -11,10 +11,10 @@ Test basic functionality of the sync command
   $ touch -d 0 world
 
   $ kitchensync update
-  # updating
+  updating
   A ./hello
   A ./world
-  # update successful
+  update successful
 
 Now sync to a new directory
 
@@ -22,10 +22,10 @@ Now sync to a new directory
   $ cd ../b
 
   $ kitchensync sync ../a
-  # syncing from ../a
+  syncing from ../a
   A ./hello
   A ./world
-  # sync successful
+  sync successful
 
   $ cat hello
   hello
@@ -37,24 +37,24 @@ Make a change in a and update
   $ touch -d 1 hello
 
   $ kitchensync update
-  # updating
+  updating
   U ./hello
-  # update successful
+  update successful
 
 Dry run sync
 
   $ cd ../b
   $ kitchensync sync --dry-run ../a
-  # syncing from ../a
+  syncing from ../a
   U ./hello
-  # sync successful
+  sync successful
 
 Real sync
 
   $ kitchensync sync ../a
-  # syncing from ../a
+  syncing from ../a
   U ./hello
-  # sync successful
+  sync successful
 
   $ cat hello
   hello world
@@ -64,12 +64,12 @@ Test deleting files
   $ cd ../a
   $ rm world
   $ kitchensync update
-  # updating
+  updating
   D ./world
-  # update successful
+  update successful
 
   $ cd ../b
   $ kitchensync sync ../a
-  # syncing from ../a
+  syncing from ../a
   R ./world
-  # sync successful
+  sync successful

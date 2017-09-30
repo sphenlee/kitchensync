@@ -1,5 +1,6 @@
 use store::{Store, StoreItem};
 use remote::Remote;
+use super::KResult;
 
 use std::path::PathBuf;
 use std::collections::BTreeMap;
@@ -26,11 +27,6 @@ impl Action {
     }
 }
 
-struct SyncState {
-    src: Store,
-    dest: Store
-}
-
 type ShaMap = BTreeMap<String, PathBuf>;
 
 fn check_duplicate(shamap: &ShaMap, name: &PathBuf, sha: &String) -> Option<PathBuf> {
@@ -55,56 +51,37 @@ fn compare_items(shamap: &ShaMap, name: &PathBuf, sitem: &StoreItem, ditem: &Sto
 }
 
 
-impl SyncState {
-    fn new(dest: Store, src: Store) -> SyncState {
-        SyncState {
-            src: src,
-            dest: dest
-        }
-    }
 
-    fn diff_stores(mut self) -> Vec<(PathBuf, Action)> {
-        let shamap = {
-            self.dest.files().iter()
-                .map(|(name, item)| (item.sha.clone(), name.clone()))
-                .collect()
-        };
+pub fn get_actions(mut dest: Store, src: Store) -> Vec<(PathBuf, Action)> {
+    let shamap = {
+        dest.files().iter()
+            .map(|(name, item)| (item.sha.clone(), name.clone()))
+            .collect()
+    };
 
-        let src = &self.src;
-        let dest = &mut self.dest;
+    let mut actions: Vec<_> = src.files().iter()
+        .flat_map(|(name, sitem)| {
 
-        let mut actions: Vec<_> = src.files().iter()
-            .flat_map(|(name, sitem)| {
-                
-                match dest.files_mut().get_mut(name) {
-                    None => {
-                        Some(check_duplicate(&shamap, &name, &sitem.sha)
-                            .map_or(Action::Add, |name| Action::Duplicate(name)))
-                    },
-                    Some(ref mut ditem) => {
-                        ditem.seen = true;
-                        compare_items(&shamap, &name, &sitem, &ditem)
-                    }
-                }.map(|action| (name.clone(), action))
-            })
-            .collect();
+            match dest.files_mut().get_mut(name) {
+                None => {
+                    Some(check_duplicate(&shamap, &name, &sitem.sha)
+                        .map_or(Action::Add, |name| Action::Duplicate(name)))
+                },
+                Some(ref mut ditem) => {
+                    ditem.seen = true;
+                    compare_items(&shamap, &name, &sitem, &ditem)
+                }
+            }.map(|action| (name.clone(), action))
+        })
+        .collect();
 
-        let removes = dest.files_mut().iter()
-            .filter(|&(_name, ditem)| !ditem.seen)
-            .map(|(name, _ditem)| (name.clone(), Action::Remove));
+    let removes = dest.files_mut().iter()
+        .filter(|&(_name, ditem)| !ditem.seen)
+        .map(|(name, _ditem)| (name.clone(), Action::Remove));
 
-        actions.extend(removes);
+    actions.extend(removes);
 
-        actions
-    }
-}
-
-
-
-pub fn get_actions(dest: Store, src: Store) -> Vec<(PathBuf, Action)> {
-    let state = SyncState::new(dest, src);
-
-    state.diff_stores()
+    actions
 }
 
 pub fn show_actions(actions: Vec<(PathBuf, Action)>) {
@@ -115,7 +92,7 @@ pub fn show_actions(actions: Vec<(PathBuf, Action)>) {
     }
 }
 
-pub fn perform_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>) {
+pub fn perform_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>) -> KResult<()> {
     for (name, action) in actions {
         println!("{} {}",
             action.get_code(),
@@ -124,19 +101,21 @@ pub fn perform_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>
         match action {
             Action::Add |
             Action::Update => {
-                remote.get(&name, &name);
+                remote.get(&name, &name)?;
             },
             Action::Remove => {
-                fs::remove_file(name);
+                fs::remove_file(name)?;
             },
             Action::Touch => {
                 // touch the file here
             },
             Action::Duplicate(ref src) => {
-                println!("# copying from {}", src.to_string_lossy());
+                info!("copying from {}", src.to_string_lossy());
                 // TODO actually duplicate the local file
-                remote.get(&name, &name);  
+                remote.get(&name, &name)?;
             }
         };
-    }    
+    }
+
+    Ok(())
 }

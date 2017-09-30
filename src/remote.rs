@@ -1,6 +1,5 @@
 extern crate url;
 
-use std::env;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -91,23 +90,23 @@ impl FileRemote {
 
 impl Remote for FileRemote {
     fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
-        //println!("get {:?} -> {:?}", self.root.join(name), dest);
+        debug!("get {:?} -> {:?}", self.root.join(name), dest);
 
-        let mut sink = try!(File::create(dest));
-        let mut src = try!(File::open(self.root.join(name)));
+        let mut sink = File::create(dest)?;
+        let mut src = File::open(self.root.join(name))?;
 
-        try!(io::copy(&mut src, &mut sink));
+        io::copy(&mut src, &mut sink)?;
 
         Ok(())
     }
 
     fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
-        //println!("put {:?} -> {:?}", src, name);
+        debug!("put {:?} -> {:?}", src, name);
 
-        let mut sink = try!(File::create(self.root.join(name)));
-        let mut src = try!(File::open(src));
+        let mut sink = File::create(self.root.join(name))?;
+        let mut src = File::open(src)?;
 
-        try!(io::copy(&mut src, &mut sink));
+        io::copy(&mut src, &mut sink)?;
 
         Ok(())
     }

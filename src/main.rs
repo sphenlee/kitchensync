@@ -1,24 +1,62 @@
 extern crate clap;
+#[macro_use] extern crate log;
+extern crate colored;
+extern crate atty;
 
 mod store;
 mod update;
 mod remote;
 mod sync;
+mod logging;
 
 use store::Store;
 
 use std::path::Path;
 use std::fs;
 
-const KSYNC: &'static str = ".ksync";
-const KSYNCREMOTE: &'static str = ".ksync.remote";
+const KSYNC: &'static str = ".kitchensync";
+const KSYNCREMOTE: &'static str = ".kitchensync-remote";
+
+type KResult<T> = Result<T, Box<std::error::Error>>;
 
 fn main() {
+    let args = parse_args();
+
+    let level = if args.is_present("quiet") {
+        log::LogLevelFilter::Off
+    } else {
+        match args.occurrences_of("verbose") {
+            1 => log::LogLevelFilter::Debug,
+            2 => log::LogLevelFilter::Trace,
+            _ => log::LogLevelFilter::Info
+        }
+    };
+    logging::init_with_level(level).unwrap();
+
+    std::process::exit(match dispatch_command(args) {
+        Ok(()) => 0,
+        Err(e) => {
+            error!("{}", e);
+            1
+        }
+    });
+}
+
+fn parse_args() -> clap::ArgMatches<'static> {
     let args = clap::App::new("kitchensync")
         .version("0.1")
         .author("Stephen Lee <sphen.lee@gmail.com>")
         .about("Serverless file synchronisation tool")
         .setting(clap::AppSettings::SubcommandRequired)
+
+        .arg(clap::Arg::with_name("verbose")
+            .short("v")
+            .multiple(true)
+            .help("Output more logging"))
+        .arg(clap::Arg::with_name("quiet")
+            .short("q")
+            .help("Silence all logging"))
+
         .subcommand(clap::SubCommand::with_name("update")
             .about("Updates the local store")
         )
@@ -41,46 +79,51 @@ fn main() {
         )
         .get_matches();
 
+    args
+}
 
+fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
     match args.subcommand() {
         ("update", Some(subargs)) => do_update(subargs),
         ("sync", Some(subargs)) => do_sync(subargs),
         _ => panic!("subcommands are supposed to be enforced by clap")
-    };
+    }
 }
 
-fn do_update<'a>(args: &clap::ArgMatches<'a>) {
-    println!("# updating");
+fn do_update<'a>(args: &clap::ArgMatches<'a>) -> KResult<()> {
+    info!("updating");
 
-    let store = Store::read(KSYNC);
+    let store = Store::read(KSYNC).unwrap_or_else(|_err| Store::empty());
 
-    println!("# getting files");
-    let files = update::get_files(".");
+    debug!("getting files");
+    let files = update::get_files(".")?;
 
-    println!("# looking for changes");
-    let updated_store = update::update_store(store, files);
+    debug!("looking for changes");
+    let updated_store = update::update_store(store, files)?;
 
-    updated_store.write_to_file(KSYNC);
+    updated_store.write_to_file(KSYNC)?;
 
-    println!("# update successful");
+    info!("update successful");
+
+    Ok(())
 }
 
 
-fn do_sync<'a>(args: &clap::ArgMatches<'a>) {
+fn do_sync<'a>(args: &clap::ArgMatches<'a>) -> KResult<()> {
     // get the remote ksync file locally
     let loc = args.value_of("target").unwrap();
     let mut remote = remote::from_location(loc).unwrap();
 
-    println!("# syncing from {}", loc);
+    info!("syncing from {}", loc);
 
     let ksync = Path::new(KSYNC);
     let ksyncremote = Path::new(KSYNCREMOTE);
 
-    remote.get(ksync, ksyncremote);
+    remote.get(ksync, ksyncremote)?;
 
     // read both stores
-    let lstore = Store::read(ksync);
-    let rstore = Store::read(ksyncremote);
+    let lstore = Store::read(ksync).unwrap_or_else(|_err| Store::empty());
+    let rstore = Store::read(ksyncremote)?;
 
     //println!("LOCAL {:?}", lstore);
     //println!("REMOTE {:?}", rstore);
@@ -96,15 +139,17 @@ fn do_sync<'a>(args: &clap::ArgMatches<'a>) {
     if args.is_present("dry-run") {
         sync::show_actions(actions);
     } else {
-        sync::perform_actions(actions, &mut remote);
+        sync::perform_actions(actions, &mut remote)?;
         
         if push {
-            remote.put(ksync, ksync);
+            remote.put(ksync, ksync)?;
             fs::remove_file(ksyncremote).unwrap();
         } else {
             fs::rename(ksyncremote, ksync).unwrap();
         }
     }
 
-    println!("# sync successful");
+    info!("sync successful");
+
+    Ok(())
 }

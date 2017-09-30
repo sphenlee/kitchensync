@@ -4,10 +4,13 @@ version = "0.1.0"
 authors = ["Stephen Lee <sphen.lee@gmail.com>"]
 
 [dependencies]
-clap = "2"
+clap = "2.26.2"
 walkdir = "0.1.8"
 url = "1.2.0"
 sha1 = "0.2.0"
+log = "0.3.8"
+colored = "1.5"
+atty = "0.2.2"
 
 [[bin]]
 name = "kitchensync"

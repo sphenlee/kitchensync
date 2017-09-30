@@ -13,10 +13,10 @@ Tests basic functionality of the update command
 Initial update
 
   $ kitchensync update
-  # updating
+  updating
   A ./hello
   A ./world
-  # update successful
+  update successful
 
 Touch a file
 
@@ -24,12 +24,12 @@ Touch a file
   $ touch -d 1 hello
 
   $ kitchensync update
-  # updating
+  updating
   U ./hello
-  # update successful
+  update successful
 
 No changes
 
   $ kitchensync update
-  # updating
-  # update successful
+  updating
+  update successful

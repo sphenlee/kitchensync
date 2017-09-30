@@ -4,6 +4,8 @@ use std::iter::FromIterator;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use super::KResult;
+
 #[derive(Debug)]
 pub struct StoreItem {
     pub sha: String,
@@ -33,19 +35,17 @@ impl Store {
         Store(StoreMap::new())
     }
 
-    pub fn read<P: AsRef<Path>>(path: P) -> Store {
-        File::open(path)
-            .map(|f| {
-                let f = BufReader::new(f);
+    pub fn read<P: AsRef<Path>>(path: P) -> KResult<Store> {
+        let fp = File::open(path)?;
 
-                let files = f.lines()
-                    .flat_map(|line| line.ok())
-                    .map(read_one_line)
-                    .collect();
+        let reader = BufReader::new(fp);
 
-                Store(files)
-            })
-            .unwrap_or_else(|_e| Store::empty())
+        let files = reader.lines()
+            .flat_map(|line| line.ok())
+            .map(read_one_line)
+            .collect();
+
+        Ok(Store(files))
     }
 
     pub fn files(&self) -> &StoreMap {
@@ -56,15 +56,13 @@ impl Store {
         &mut self.0
     }
 
-    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) {
-        File::create(path)
-            .map(|f| {
-                self.write(f)
-            })
-            .unwrap();
+    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> KResult<()> {
+        let fp = File::create(path)?;
+        self.write(fp)?;
+        Ok(())
     }
 
-    pub fn write<W: Write>(&self, mut out: W) {
+    pub fn write<W: Write>(&self, mut out: W) -> KResult<()> {
         for (ref name, ref item) in self.files().iter() {
             if item.seen {
                 let line = format!("{} {} {}\n",
@@ -72,9 +70,10 @@ impl Store {
                     item.timestamp,
                     name.to_str().unwrap());
             
-                out.write_all(line.as_ref()).unwrap();
+                out.write_all(line.as_ref())?;
             }
         }
+        Ok(())
     }
 }
 
