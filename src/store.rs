@@ -6,14 +6,14 @@ use std::path::{Path, PathBuf};
 
 use super::KResult;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StoreItem {
     pub sha: String,
     pub timestamp: u64,
     pub seen: bool
 }
 
-type StoreTuple = (PathBuf, StoreItem);
+pub type StoreTuple = (PathBuf, StoreItem);
 type StoreMap = BTreeMap<PathBuf, StoreItem>;
 
 fn read_one_line(line: String) -> StoreTuple {
@@ -64,14 +64,14 @@ impl Store {
 
     pub fn write<W: Write>(&self, mut out: W) -> KResult<()> {
         for (ref name, ref item) in self.files().iter() {
-            if item.seen {
+            //if item.seen {
                 let line = format!("{} {} {}\n",
                     item.sha,
                     item.timestamp,
                     name.to_str().unwrap());
             
                 out.write_all(line.as_ref())?;
-            }
+            //}
         }
         Ok(())
     }

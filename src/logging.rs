@@ -9,7 +9,7 @@ struct Logger {
     colours: bool
 }
 
-impl log::Log for Logger {
+impl Log for Logger {
     fn enabled(&self, metadata: &LogMetadata) -> bool {
         metadata.level() <= self.log_level
     }

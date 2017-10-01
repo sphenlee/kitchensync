@@ -1,14 +1,11 @@
-extern crate walkdir;
-extern crate sha1;
-
-use self::walkdir::{WalkDir, DirEntry, WalkDirIterator};
+use walkdir::{WalkDir, DirEntry, WalkDirIterator};
+use sha1;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::collections::btree_map::Entry;
 use std::fs::File;
 use std::io::Read;
 
-use store::{Store, StoreItem};
+use store::{Store, StoreItem, StoreTuple};
 use super::KResult;
 
 #[derive(Debug)]
@@ -63,6 +60,8 @@ fn get_sha1(name: &Path) -> KResult<String> {
 }
 
 fn added_file(filestat: &FileStat) -> KResult<StoreItem> {
+    println!("A {}", filestat.name.to_string_lossy());
+
     Ok(StoreItem {
         sha: get_sha1(&filestat.name)?,
         timestamp: filestat.timestamp,
@@ -70,43 +69,44 @@ fn added_file(filestat: &FileStat) -> KResult<StoreItem> {
     })
 }
 
-fn compare_file(existing: &mut StoreItem, filestat: &FileStat) -> KResult<()> {
-    existing.seen = true;
+fn compare_file(existing: StoreItem, filestat: &FileStat) -> KResult<StoreItem> {
+    let mut output = existing.clone();
+    output.seen = true;
 
     if existing.timestamp != filestat.timestamp {
+        trace!("timestamp changed {:?} {:?}", filestat, existing);
         let sha = get_sha1(&filestat.name)?;
         if existing.sha != sha {
+            trace!("sha changed {:?} {:?}", filestat, existing);
             println!("U {}", filestat.name.to_string_lossy());
-            existing.sha = sha;
-            existing.timestamp = filestat.timestamp;
+            output.sha = sha;
+            output.timestamp = filestat.timestamp;
         }
     }
 
-    Ok(())
+    Ok(output)
 }
 
-pub fn update_store(mut store: Store, files: Vec<FileStat>) -> KResult<Store> {
-    for filestat in files {
-        //println!("# {}", filestat.name.to_string_lossy());
+pub fn update_store(mut store: Store, files: Vec<FileStat>) -> KResult<(Store, Vec<StoreTuple>)> {
+    let mut updated_store = Vec::new();
 
-        match store.files_mut().entry(filestat.name.clone()) {
-            Entry::Vacant(entry) => {
-                println!("A {}", entry.key().to_string_lossy());
-                entry.insert(added_file(&filestat)?);
-            },
-            Entry::Occupied(entry) => {
-                compare_file(entry.into_mut(), &filestat)?;
-            }
+    for file in files {
+        trace!("checking {:?}", file.name);
+        let updated_item = match store.files_mut().remove(&file.name) {
+            None => added_file(&file)?,
+            Some(item) => compare_file(item, &file)?
         };
+
+        updated_store.push((file.name, updated_item));
     }
 
-    for (name, item) in store.files().iter() {
-        if !item.seen {
-            println!("D {}", name.to_string_lossy());
-        }
-    }
+    let deleted = store.into_iter().collect();
 
-    Ok(store.into_iter()
-        .filter(|&(ref _path, ref item)| item.seen)
-        .collect::<Store>())
+    Ok((updated_store.into_iter().collect(), deleted))
+}
+
+pub fn report_deleted(store: Vec<StoreTuple>) {
+    for (name, _item) in store {
+        println!("D {}", name.to_string_lossy());
+    }
 }

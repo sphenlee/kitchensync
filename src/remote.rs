@@ -90,10 +90,12 @@ impl FileRemote {
 
 impl Remote for FileRemote {
     fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
-        debug!("get {:?} -> {:?}", self.root.join(name), dest);
+        let resolved = self.root.join(name);
+
+        debug!("get {:?} -> {:?}", resolved, dest);
 
         let mut sink = File::create(dest)?;
-        let mut src = File::open(self.root.join(name))?;
+        let mut src = File::open(resolved)?;
 
         io::copy(&mut src, &mut sink)?;
 
@@ -101,9 +103,11 @@ impl Remote for FileRemote {
     }
 
     fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
-        debug!("put {:?} -> {:?}", src, name);
+        let resolved = self.root.join(name);
 
-        let mut sink = File::create(self.root.join(name))?;
+        debug!("put {:?} -> {:?}", src, resolved);
+
+        let mut sink = File::create(resolved)?;
         let mut src = File::open(src)?;
 
         io::copy(&mut src, &mut sink)?;

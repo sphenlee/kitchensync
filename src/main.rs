@@ -1,4 +1,6 @@
 extern crate clap;
+extern crate walkdir;
+extern crate sha1;
 #[macro_use] extern crate log;
 extern crate colored;
 extern crate atty;
@@ -13,6 +15,7 @@ use store::Store;
 
 use std::path::Path;
 use std::fs;
+use std::io;
 
 const KSYNC: &'static str = ".kitchensync";
 const KSYNCREMOTE: &'static str = ".kitchensync-remote";
@@ -50,15 +53,22 @@ fn parse_args() -> clap::ArgMatches<'static> {
         .setting(clap::AppSettings::SubcommandRequired)
 
         .arg(clap::Arg::with_name("verbose")
+            .long("verbose")
             .short("v")
             .multiple(true)
             .help("Output more logging"))
         .arg(clap::Arg::with_name("quiet")
+            .long("quiet")
             .short("q")
             .help("Silence all logging"))
 
         .subcommand(clap::SubCommand::with_name("update")
             .about("Updates the local store")
+
+            .arg(clap::Arg::with_name("deleted")
+                .long("deleted")
+                .help("check for deleted files")
+            )
         )
         .subcommand(clap::SubCommand::with_name("sync")
             .about("Perform a synchronisation")
@@ -76,6 +86,11 @@ fn parse_args() -> clap::ArgMatches<'static> {
                 .short("n")
                 .help("Dry run, print actions but do not perform them")
             )
+
+            .arg(clap::Arg::with_name("delete")
+                .long("delete")
+                .help("delete files removed from remote target")
+            )
         )
         .get_matches();
 
@@ -84,13 +99,29 @@ fn parse_args() -> clap::ArgMatches<'static> {
 
 fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
     match args.subcommand() {
-        ("update", Some(subargs)) => do_update(subargs),
-        ("sync", Some(subargs)) => do_sync(subargs),
+        ("update", Some(subargs)) => {
+            let opts = UpdateOpts {
+                deleted: subargs.is_present("deleted")
+            };
+            do_update(opts)
+        },
+        ("sync", Some(subargs)) => {
+            let opts = SyncOpts {
+                target: subargs.value_of("target").unwrap().to_owned(),
+                push: subargs.is_present("push"),
+                dry_run: subargs.is_present("dry-run")
+            };
+            do_sync(opts)
+        },
         _ => panic!("subcommands are supposed to be enforced by clap")
     }
 }
 
-fn do_update<'a>(args: &clap::ArgMatches<'a>) -> KResult<()> {
+struct UpdateOpts {
+    deleted: bool
+}
+
+fn do_update(opts: UpdateOpts) -> KResult<()> {
     info!("updating");
 
     let store = Store::read(KSYNC).unwrap_or_else(|_err| Store::empty());
@@ -99,7 +130,15 @@ fn do_update<'a>(args: &clap::ArgMatches<'a>) -> KResult<()> {
     let files = update::get_files(".")?;
 
     debug!("looking for changes");
-    let updated_store = update::update_store(store, files)?;
+    let (mut updated_store, deleted) = update::update_store(store, files)?;
+
+    if opts.deleted {
+        debug!("reporting deleted files");
+        update::report_deleted(deleted);
+    } else {
+        debug!("re-add deleted files to the store");
+        updated_store.files_mut().extend(deleted);
+    }
 
     updated_store.write_to_file(KSYNC)?;
 
@@ -108,44 +147,64 @@ fn do_update<'a>(args: &clap::ArgMatches<'a>) -> KResult<()> {
     Ok(())
 }
 
+struct SyncOpts {
+    target: String,
+    push: bool,
+    dry_run: bool
+}
 
-fn do_sync<'a>(args: &clap::ArgMatches<'a>) -> KResult<()> {
+fn do_sync(opts: SyncOpts) -> KResult<()> {
     // get the remote ksync file locally
-    let loc = args.value_of("target").unwrap();
-    let mut remote = remote::from_location(loc).unwrap();
+    let mut remote = remote::from_location(&opts.target).unwrap();
 
-    info!("syncing from {}", loc);
+    info!("syncing from {}", opts.target);
 
     let ksync = Path::new(KSYNC);
     let ksyncremote = Path::new(KSYNCREMOTE);
 
-    remote.get(ksync, ksyncremote)?;
+    debug!("get remote store locally");
+    remote.get(ksync, ksyncremote).or_else(|err| {
+        if err.kind() == io::ErrorKind::NotFound {
+            Ok(())
+        } else {
+            Err(err)
+        }
+    })?;
 
     // read both stores
+    debug!("reading local store");
     let lstore = Store::read(ksync).unwrap_or_else(|_err| Store::empty());
-    let rstore = Store::read(ksyncremote)?;
+    debug!("reading remote store");
+    let rstore = Store::read(ksyncremote).unwrap_or_else(|_err| Store::empty());
 
     //println!("LOCAL {:?}", lstore);
     //println!("REMOTE {:?}", rstore);
 
     // compare the stores
-    let push = args.is_present("push");
-    let actions = if push {
+    debug!("comparing stores");
+    let actions = if opts.push {
         sync::get_actions(rstore, lstore) // get_actions takes destination then source
     } else {
         sync::get_actions(lstore, rstore)
     };
 
-    if args.is_present("dry-run") {
+    if opts.dry_run {
         sync::show_actions(actions);
+
+        debug!("removing local copy of remote store");
+        fs::remove_file(ksyncremote)?;
     } else {
+        debug!("performing sync");
         sync::perform_actions(actions, &mut remote)?;
         
-        if push {
+        if opts.push {
+            debug!("uploading store to remote");
             remote.put(ksync, ksync)?;
-            fs::remove_file(ksyncremote).unwrap();
+            debug!("removing local copy of remote store");
+            fs::remove_file(ksyncremote)?;
         } else {
-            fs::rename(ksyncremote, ksync).unwrap();
+            debug!("update local store");
+            fs::rename(ksyncremote, ksync)?;
         }
     }
 

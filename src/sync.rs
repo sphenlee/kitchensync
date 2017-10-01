@@ -3,14 +3,12 @@ use remote::Remote;
 use super::KResult;
 
 use std::path::PathBuf;
-use std::collections::BTreeMap;
 use std::fs;
 
 #[derive(Debug)]
 pub enum Action {
     Add,
     Remove,
-    Duplicate(PathBuf),
     Touch,
     Update
 }
@@ -21,28 +19,14 @@ impl Action {
             Action::Add => 'A',
             Action::Remove => 'R',
             Action::Touch => 'T',
-            Action::Duplicate(_) => 'U',
             Action::Update => 'U'
         }
     }
 }
 
-type ShaMap = BTreeMap<String, PathBuf>;
-
-fn check_duplicate(shamap: &ShaMap, name: &PathBuf, sha: &String) -> Option<PathBuf> {
-    shamap.get(sha).and_then(|p| {
-        if p == name {
-            None
-        } else {
-            Some(p.clone())
-        }
-    })
-}
-
-fn compare_items(shamap: &ShaMap, name: &PathBuf, sitem: &StoreItem, ditem: &StoreItem) -> Option<Action> {
+fn compare_items(sitem: &StoreItem, ditem: &StoreItem) -> Option<Action> {
     if sitem.sha != ditem.sha {
-        Some(check_duplicate(shamap, name, &sitem.sha)
-            .map_or(Action::Update, |dupname| Action::Duplicate(dupname)))
+        Some(Action::Update)
     } else if sitem.timestamp != ditem.timestamp {
         Some(Action::Touch)
     } else {
@@ -50,26 +34,16 @@ fn compare_items(shamap: &ShaMap, name: &PathBuf, sitem: &StoreItem, ditem: &Sto
     }
 }
 
-
-
 pub fn get_actions(mut dest: Store, src: Store) -> Vec<(PathBuf, Action)> {
-    let shamap = {
-        dest.files().iter()
-            .map(|(name, item)| (item.sha.clone(), name.clone()))
-            .collect()
-    };
-
     let mut actions: Vec<_> = src.files().iter()
         .flat_map(|(name, sitem)| {
-
             match dest.files_mut().get_mut(name) {
                 None => {
-                    Some(check_duplicate(&shamap, &name, &sitem.sha)
-                        .map_or(Action::Add, |name| Action::Duplicate(name)))
+                    Some(Action::Add)
                 },
                 Some(ref mut ditem) => {
                     ditem.seen = true;
-                    compare_items(&shamap, &name, &sitem, &ditem)
+                    compare_items(&sitem, &ditem)
                 }
             }.map(|action| (name.clone(), action))
         })
@@ -108,11 +82,6 @@ pub fn perform_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>
             },
             Action::Touch => {
                 // touch the file here
-            },
-            Action::Duplicate(ref src) => {
-                info!("copying from {}", src.to_string_lossy());
-                // TODO actually duplicate the local file
-                remote.get(&name, &name)?;
             }
         };
     }

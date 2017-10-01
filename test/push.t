@@ -1,4 +1,4 @@
-Test basic functionality of the sync command
+Test push functionality of the sync command
 
   $ kitchensync() { RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
 
@@ -16,12 +16,11 @@ Test basic functionality of the sync command
   A ./world
   update successful
 
-Now sync to a new directory
+Now push to a new directory
 
   $ mkdir ../b
-  $ cd ../b
 
-  $ kitchensync sync ../a
+  $ kitchensync sync --push ../b
   syncing from ../a
   A ./hello
   A ./world
@@ -32,7 +31,6 @@ Now sync to a new directory
 
 Make a change in a and update
 
-  $ cd ../a
   $ echo "hello world" > hello
   $ touch -d 1 hello
 
@@ -43,15 +41,14 @@ Make a change in a and update
 
 Dry run sync
 
-  $ cd ../b
-  $ kitchensync sync --dry-run ../a
+  $ kitchensync sync --push --dry-run ../b
   syncing from ../a
   U ./hello
   sync successful
 
 Real sync
 
-  $ kitchensync sync ../a
+  $ kitchensync sync --push ../b
   syncing from ../a
   U ./hello
   sync successful
@@ -61,15 +58,13 @@ Real sync
 
 Test deleting files
 
-  $ cd ../a
   $ rm world
   $ kitchensync update --deleted
   updating
   D ./world
   update successful
 
-  $ cd ../b
-  $ kitchensync sync ../a
+  $ kitchensync sync --push ../b
   syncing from ../a
   R ./world
   sync successful

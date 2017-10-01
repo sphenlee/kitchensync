@@ -31,17 +31,19 @@ Move a file and sync again
   $ cd ../a
   $ mv hello world
 
-  $ kitchensync update
+  $ kitchensync -v update --deleted
   updating
+  getting files
+  looking for changes
   A ./world
+  reporting deleted files
   D ./hello
   update successful
 
   $ cd ../b
   $ kitchensync sync ../a
   syncing from ../a
-  U ./world
-  copying from ./hello
+  A ./world
   R ./hello
   sync successful
 
