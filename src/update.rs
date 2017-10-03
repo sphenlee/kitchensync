@@ -33,7 +33,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.file_type().is_file())
         .map(|entry| {
-            let name = entry.path().into();
+            let name = entry.path().strip_prefix("./").unwrap().to_owned();
             let meta = entry.metadata().unwrap();
             FileStat {
                 name: name,

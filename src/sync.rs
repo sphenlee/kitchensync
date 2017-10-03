@@ -37,21 +37,24 @@ fn compare_items(sitem: &StoreItem, ditem: &StoreItem) -> Option<Action> {
 pub fn get_actions(mut dest: Store, src: Store) -> Vec<(PathBuf, Action)> {
     let mut actions: Vec<_> = src.files().iter()
         .flat_map(|(name, sitem)| {
-            match dest.files_mut().get_mut(name) {
+            trace!("checking {:?}", name);
+            match dest.files_mut().remove(name) {
                 None => {
                     Some(Action::Add)
                 },
-                Some(ref mut ditem) => {
-                    ditem.seen = true;
+                Some(ditem) => {
                     compare_items(&sitem, &ditem)
                 }
-            }.map(|action| (name.clone(), action))
+            }.map(|action| {
+                (name.clone(), action)
+            })
         })
         .collect();
 
-    let removes = dest.files_mut().iter()
-        .filter(|&(_name, ditem)| !ditem.seen)
-        .map(|(name, _ditem)| (name.clone(), Action::Remove));
+    let removes = dest.into_iter()
+        .map(|(name, _ditem)| {
+            (name, Action::Remove)
+        });
 
     actions.extend(removes);
 
@@ -66,7 +69,7 @@ pub fn show_actions(actions: Vec<(PathBuf, Action)>) {
     }
 }
 
-pub fn perform_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>) -> KResult<()> {
+pub fn perform_pull_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>) -> KResult<()> {
     for (name, action) in actions {
         println!("{} {}",
             action.get_code(),

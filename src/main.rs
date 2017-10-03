@@ -4,12 +4,16 @@ extern crate sha1;
 #[macro_use] extern crate log;
 extern crate colored;
 extern crate atty;
+extern crate rusoto_core;
+extern crate rusoto_s3;
+extern crate url;
 
 mod store;
 mod update;
 mod remote;
 mod sync;
 mod logging;
+mod s3;
 
 use store::Store;
 
@@ -29,9 +33,9 @@ fn main() {
         log::LogLevelFilter::Off
     } else {
         match args.occurrences_of("verbose") {
+            0 => log::LogLevelFilter::Info,
             1 => log::LogLevelFilter::Debug,
-            2 => log::LogLevelFilter::Trace,
-            _ => log::LogLevelFilter::Info
+            _ => log::LogLevelFilter::Trace
         }
     };
     logging::init_with_level(level).unwrap();
@@ -155,7 +159,7 @@ struct SyncOpts {
 
 fn do_sync(opts: SyncOpts) -> KResult<()> {
     // get the remote ksync file locally
-    let mut remote = remote::from_location(&opts.target).unwrap();
+    let mut remote = remote::from_location(&opts.target)?;
 
     info!("syncing from {}", opts.target);
 
@@ -195,14 +199,15 @@ fn do_sync(opts: SyncOpts) -> KResult<()> {
         fs::remove_file(ksyncremote)?;
     } else {
         debug!("performing sync");
-        sync::perform_actions(actions, &mut remote)?;
-        
+
         if opts.push {
             debug!("uploading store to remote");
             remote.put(ksync, ksync)?;
             debug!("removing local copy of remote store");
             fs::remove_file(ksyncremote)?;
         } else {
+            sync::perform_pull_actions(actions, &mut remote)?;
+
             debug!("update local store");
             fs::rename(ksyncremote, ksync)?;
         }
