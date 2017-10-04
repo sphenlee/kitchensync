@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -13,6 +13,7 @@ use super::KResult;
 pub trait Remote {
     fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()>;
     fn put(&mut self, name: &Path, src: &Path) -> io::Result<()>;
+    fn remove(&mut self, name: &Path) -> io::Result<()>;
 }
 
 pub fn from_location(location: &str) -> KResult<Box<Remote>> {
@@ -78,5 +79,12 @@ impl Remote for FileRemote {
         io::copy(&mut src, &mut sink)?;
 
         Ok(())
+    }
+
+    fn remove(&mut self, name: &Path) -> io::Result<()> {
+        let resolved = self.root.join(name);
+
+        debug!("remove {:?}", resolved);
+        fs::remove_file(resolved)
     }
 }

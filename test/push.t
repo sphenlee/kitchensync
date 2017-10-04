@@ -12,8 +12,8 @@ Test push functionality of the sync command
 
   $ kitchensync update
   updating
-  A ./hello
-  A ./world
+  A hello
+  A world
   update successful
 
 Now push to a new directory
@@ -21,9 +21,9 @@ Now push to a new directory
   $ mkdir ../b
 
   $ kitchensync sync --push ../b
-  syncing from ../a
-  A ./hello
-  A ./world
+  syncing to ../b
+  A hello
+  A world
   sync successful
 
   $ cat hello
@@ -36,35 +36,50 @@ Make a change in a and update
 
   $ kitchensync update
   updating
-  U ./hello
+  U hello
   update successful
 
 Dry run sync
 
   $ kitchensync sync --push --dry-run ../b
-  syncing from ../a
-  U ./hello
+  syncing to ../b
+  U hello
   sync successful
 
 Real sync
 
   $ kitchensync sync --push ../b
-  syncing from ../a
-  U ./hello
+  syncing to ../b
+  U hello
   sync successful
 
-  $ cat hello
+  $ cat ../b/hello
   hello world
+
+  $ ls ../b
+  hello
+  world
 
 Test deleting files
 
   $ rm world
   $ kitchensync update --deleted
   updating
-  D ./world
+  D world
   update successful
 
-  $ kitchensync sync --push ../b
-  syncing from ../a
-  R ./world
+Create the deleted file again to check we delete the right
+file in the sync below
+
+  $ echo tombstone > world
+
+  $ kitchensync sync --delete --push ../b
+  syncing to ../b
+  R world
   sync successful
+
+  $ cat world
+  tombstone
+
+  $ test -f ../b/world
+  [1]

@@ -14,8 +14,8 @@ Initial update
 
   $ kitchensync update
   updating
-  A ./hello
-  A ./world
+  A hello
+  A world
   update successful
 
 Touch a file
@@ -25,7 +25,7 @@ Touch a file
 
   $ kitchensync update
   updating
-  U ./hello
+  U hello
   update successful
 
 No changes

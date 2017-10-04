@@ -17,9 +17,10 @@ impl Log for Logger {
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
 
+            let module = record.location().module_path();
             let raw = match record.level() {
-                LogLevel::Error => format!("ERROR: {}", record.args()),
-                LogLevel::Warn => format!("WARN: {}", record.args()),
+                LogLevel::Error => format!("[ERROR] {}: {}", module, record.args()),
+                LogLevel::Warn => format!("[WARN] {}: {}", module, record.args()),
                 _ => format!("{}", record.args())
             };
 
@@ -37,7 +38,7 @@ impl Log for Logger {
 
             if record.level() <= LogLevel::Warn {
                 let _ = writeln!(&mut io::stderr(), "{}", coloured);
-            } else {
+            } else if module == "kitchensync" {
                 println!("{}", coloured);
             }
         }

@@ -10,7 +10,7 @@ Test duplicating files
 
   $ kitchensync update
   updating
-  A ./hello
+  A hello
   update successful
 
 Now sync to a new directory
@@ -20,7 +20,7 @@ Now sync to a new directory
 
   $ kitchensync sync ../a
   syncing from ../a
-  A ./hello
+  A hello
   sync successful
 
   $ cat hello
@@ -35,16 +35,16 @@ Move a file and sync again
   updating
   getting files
   looking for changes
-  A ./world
+  A world
   reporting deleted files
-  D ./hello
+  D hello
   update successful
 
   $ cd ../b
-  $ kitchensync sync ../a
+  $ kitchensync sync --delete ../a
   syncing from ../a
-  A ./world
-  R ./hello
+  A world
+  R hello
   sync successful
 
   $ cat world

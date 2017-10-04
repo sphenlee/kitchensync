@@ -7,6 +7,8 @@ extern crate atty;
 extern crate rusoto_core;
 extern crate rusoto_s3;
 extern crate url;
+extern crate rayon;
+extern crate indicatif;
 
 mod store;
 mod update;
@@ -113,7 +115,8 @@ fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
             let opts = SyncOpts {
                 target: subargs.value_of("target").unwrap().to_owned(),
                 push: subargs.is_present("push"),
-                dry_run: subargs.is_present("dry-run")
+                dry_run: subargs.is_present("dry-run"),
+                delete: subargs.is_present("delete")
             };
             do_sync(opts)
         },
@@ -154,21 +157,26 @@ fn do_update(opts: UpdateOpts) -> KResult<()> {
 struct SyncOpts {
     target: String,
     push: bool,
-    dry_run: bool
+    dry_run: bool,
+    delete: bool
 }
 
 fn do_sync(opts: SyncOpts) -> KResult<()> {
     // get the remote ksync file locally
     let mut remote = remote::from_location(&opts.target)?;
 
-    info!("syncing from {}", opts.target);
+    info!("syncing {} {}",
+          (if opts.push { "to" } else { "from" }),
+          opts.target);
 
     let ksync = Path::new(KSYNC);
     let ksyncremote = Path::new(KSYNCREMOTE);
 
     debug!("get remote store locally");
+    let mut got_remote_store = true;
     remote.get(ksync, ksyncremote).or_else(|err| {
         if err.kind() == io::ErrorKind::NotFound {
+            got_remote_store = false;
             Ok(())
         } else {
             Err(err)
@@ -186,11 +194,15 @@ fn do_sync(opts: SyncOpts) -> KResult<()> {
 
     // compare the stores
     debug!("comparing stores");
-    let actions = if opts.push {
+    let (mut actions, removes) = if opts.push {
         sync::get_actions(rstore, lstore) // get_actions takes destination then source
     } else {
         sync::get_actions(lstore, rstore)
     };
+
+    if opts.delete {
+        actions.extend(removes);
+    }
 
     if opts.dry_run {
         sync::show_actions(actions);
@@ -201,10 +213,15 @@ fn do_sync(opts: SyncOpts) -> KResult<()> {
         debug!("performing sync");
 
         if opts.push {
+            sync::perform_push_actions(actions, &mut remote)?;
+
             debug!("uploading store to remote");
             remote.put(ksync, ksync)?;
-            debug!("removing local copy of remote store");
-            fs::remove_file(ksyncremote)?;
+
+            if got_remote_store {
+                debug!("removing local copy of remote store");
+                fs::remove_file(ksyncremote)?;
+            }
         } else {
             sync::perform_pull_actions(actions, &mut remote)?;
 

@@ -1,10 +1,14 @@
-use rusoto_s3::{S3, S3Client, GetObjectRequest};
-use rusoto_core::{DefaultCredentialsProvider, Region};
-use rusoto_core::default_tls_client;
+use rusoto_s3::{S3,
+                S3Client,
+                GetObjectRequest,
+                PutObjectRequest,
+                DeleteObjectRequest};
+use rusoto_core::DefaultCredentialsProvider;
+use rusoto_core::{default_tls_client, default_region};
 use url::Url;
 use std::path::{Path, PathBuf};
 use std::fs::File;
-use std::io;
+use std::io::{self, Read};
 
 use super::KResult;
 use remote::Remote;
@@ -20,7 +24,7 @@ impl S3Remote {
         let client = Box::new(S3Client::new(
             default_tls_client().unwrap(),
             DefaultCredentialsProvider::new()?,
-            Region::UsEast1
+            default_region()
         ));
 
         let bucket = url.host_str().ok_or("S3 URL missing bucket")?;
@@ -36,15 +40,20 @@ impl S3Remote {
 
 impl Remote for S3Remote {
     fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
-        debug!("get {:?} -> {:?}", name, dest);
-
         // TODO don't allocate so much stuff here
         let mut req = GetObjectRequest::default();
         req.bucket = self.bucket.clone();
         req.key = self.prefix.join(name).to_string_lossy().into();
 
+        debug!("get s3://{}/{} -> {:?}", req.bucket, req.key, dest);
+
         let resp = self.client.get_object(&req).map_err(|err| {
-            io::Error::new(io::ErrorKind::Other, err)
+            debug!("s3 error {:?}", err);
+            //if let GetObjectError::NoSuchKey(_) = err {
+                io::Error::new(io::ErrorKind::NotFound, err)
+            //} else {
+            //    io::Error::new(io::ErrorKind::Other, err)
+            //}
         })?;
         let mut body = resp.body.expect("no S3 body returned");
 
@@ -55,7 +64,36 @@ impl Remote for S3Remote {
         Ok(())
     }
 
-    fn put(&mut self, _name: &Path, _src: &Path) -> io::Result<()> {
-        unimplemented!()
+    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
+        // TODO don't allocate so much stuff here
+        let mut req = PutObjectRequest::default();
+        req.bucket = self.bucket.clone();
+        req.key = self.prefix.join(name).to_string_lossy().into();
+
+        let mut body = Vec::new();
+        File::open(src)?.read_to_end(&mut body)?;
+        req.body = Some(body);
+
+        debug!("put {:?} -> s3://{}/{}", src, req.bucket, req.key);
+
+        self.client.put_object(&req).map_err(|err| {
+            io::Error::new(io::ErrorKind::Other, err)
+        })?;
+
+        Ok(())
+    }
+
+    fn remove(&mut self, name: &Path) -> io::Result<()> {
+        let mut req = DeleteObjectRequest::default();
+        req.bucket = self.bucket.clone();
+        req.key = self.prefix.join(name).to_string_lossy().into();
+
+        debug!("remove s3://{}/{}", req.bucket, req.key);
+
+        self.client.delete_object(&req).map_err(|err| {
+            io::Error::new(io::ErrorKind::Other, err)
+        })?;
+
+        Ok(())
     }
 }

@@ -12,8 +12,8 @@ Test basic functionality of the sync command
 
   $ kitchensync update
   updating
-  A ./hello
-  A ./world
+  A hello
+  A world
   update successful
 
 Now sync to a new directory
@@ -23,9 +23,13 @@ Now sync to a new directory
 
   $ kitchensync sync ../a
   syncing from ../a
-  A ./hello
-  A ./world
+  A hello
+  A world
   sync successful
+
+  $ ls
+  hello
+  world
 
   $ cat hello
   hello
@@ -38,7 +42,7 @@ Make a change in a and update
 
   $ kitchensync update
   updating
-  U ./hello
+  U hello
   update successful
 
 Dry run sync
@@ -46,14 +50,14 @@ Dry run sync
   $ cd ../b
   $ kitchensync sync --dry-run ../a
   syncing from ../a
-  U ./hello
+  U hello
   sync successful
 
 Real sync
 
   $ kitchensync sync ../a
   syncing from ../a
-  U ./hello
+  U hello
   sync successful
 
   $ cat hello
@@ -65,11 +69,27 @@ Test deleting files
   $ rm world
   $ kitchensync update --deleted
   updating
-  D ./world
+  D world
   update successful
 
   $ cd ../b
   $ kitchensync sync ../a
   syncing from ../a
-  R ./world
   sync successful
+
+  $ cat world
+  world
+
+  $ kitchensync sync --dry-run --delete ../a
+  syncing from ../a
+  R world
+  sync successful
+  $ cat world
+  world
+
+  $ kitchensync sync --dry-run --delete ../a
+  syncing from ../a
+  R world
+  sync successful
+  $ test -f world
+  [1]
