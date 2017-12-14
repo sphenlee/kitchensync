@@ -5,8 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::File;
 use std::io::Read;
 
-use store::{Store, StoreItem, StoreTuple};
-use super::KResult;
+use store::{Store, StoreItem};
+use progress::Reporter;
+use super::{KResult, UpdateOpts};
 
 #[derive(Debug)]
 pub struct FileStat {
@@ -36,7 +37,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
             let name = entry.path().strip_prefix("./").unwrap().to_owned();
             let meta = entry.metadata().unwrap();
             FileStat {
-                name: name,
+                name,
                 timestamp: systemtime_to_u64(meta.modified().unwrap())
             }
         })
@@ -59,8 +60,8 @@ fn get_sha1(name: &Path) -> KResult<String> {
     Ok(h.digest().to_string())
 }
 
-fn added_file(filestat: &FileStat) -> KResult<StoreItem> {
-    println!("A {}", filestat.name.to_string_lossy());
+fn added_file(reporter: &Reporter, filestat: &FileStat) -> KResult<StoreItem> {
+    reporter.report(format!("A {}", filestat.name.to_string_lossy()));
 
     Ok(StoreItem {
         sha: get_sha1(&filestat.name)?,
@@ -69,7 +70,7 @@ fn added_file(filestat: &FileStat) -> KResult<StoreItem> {
     })
 }
 
-fn compare_file(existing: StoreItem, filestat: &FileStat) -> KResult<StoreItem> {
+fn compare_file(reporter: &Reporter, existing: StoreItem, filestat: &FileStat) -> KResult<StoreItem> {
     let mut output = existing.clone();
     output.seen = true;
 
@@ -78,7 +79,7 @@ fn compare_file(existing: StoreItem, filestat: &FileStat) -> KResult<StoreItem> 
         let sha = get_sha1(&filestat.name)?;
         if existing.sha != sha {
             trace!("sha changed {:?} {:?}", filestat, existing);
-            println!("U {}", filestat.name.to_string_lossy());
+            reporter.report(format!("U {}", filestat.name.to_string_lossy()));
             output.sha = sha;
             output.timestamp = filestat.timestamp;
         }
@@ -87,26 +88,32 @@ fn compare_file(existing: StoreItem, filestat: &FileStat) -> KResult<StoreItem> 
     Ok(output)
 }
 
-pub fn update_store(mut store: Store, files: Vec<FileStat>) -> KResult<(Store, Vec<StoreTuple>)> {
+pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -> KResult<Store>
+{
     let mut updated_store = Vec::new();
+    let reporter = Reporter::new(files.len());
 
     for file in files {
         trace!("checking {:?}", file.name);
+        reporter.inc();
+
         let updated_item = match store.files_mut().remove(&file.name) {
-            None => added_file(&file)?,
-            Some(item) => compare_file(item, &file)?
+            None => added_file(&reporter, &file)?,
+            Some(item) => compare_file(&reporter, item, &file)?
         };
 
         updated_store.push((file.name, updated_item));
     }
 
-    let deleted = store.into_iter().collect();
-
-    Ok((updated_store.into_iter().collect(), deleted))
-}
-
-pub fn report_deleted(store: Vec<StoreTuple>) {
-    for (name, _item) in store {
-        println!("D {}", name.to_string_lossy());
+    if opts.deleted {
+        debug!("reporting deleted files");
+        for (name, _item) in store.into_iter() {
+            reporter.report(format!("D {}", name.to_string_lossy()));
+        }
+    } else {
+        debug!("re-add deleted files to the store");
+        updated_store.extend(store.into_iter());
     }
+
+    Ok(updated_store.into_iter().collect())
 }

@@ -9,6 +9,7 @@ use url::Url;
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::{self, Read};
+use std::fs;
 
 use super::KResult;
 use remote::Remote;
@@ -39,7 +40,7 @@ impl S3Remote {
 }
 
 impl Remote for S3Remote {
-    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
+    fn get(&self, name: &Path, dest: &Path) -> io::Result<()> {
         // TODO don't allocate so much stuff here
         let mut req = GetObjectRequest::default();
         req.bucket = self.bucket.clone();
@@ -57,6 +58,9 @@ impl Remote for S3Remote {
         })?;
         let mut body = resp.body.expect("no S3 body returned");
 
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
         let mut sink = File::create(dest)?;
 
         io::copy(&mut *body, &mut sink)?;
@@ -64,7 +68,7 @@ impl Remote for S3Remote {
         Ok(())
     }
 
-    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
+    fn put(&self, name: &Path, src: &Path) -> io::Result<()> {
         // TODO don't allocate so much stuff here
         let mut req = PutObjectRequest::default();
         req.bucket = self.bucket.clone();
@@ -83,7 +87,7 @@ impl Remote for S3Remote {
         Ok(())
     }
 
-    fn remove(&mut self, name: &Path) -> io::Result<()> {
+    fn remove(&self, name: &Path) -> io::Result<()> {
         let mut req = DeleteObjectRequest::default();
         req.bucket = self.bucket.clone();
         req.key = self.prefix.join(name).to_string_lossy().into();
@@ -94,6 +98,11 @@ impl Remote for S3Remote {
             io::Error::new(io::ErrorKind::Other, err)
         })?;
 
+        Ok(())
+    }
+
+    fn touch(&self, _path: &Path, _ts: u64) -> io::Result<()> {
+        // can't touch files in S3
         Ok(())
     }
 }

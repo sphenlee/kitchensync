@@ -1,28 +1,29 @@
 use store::{Store, StoreItem};
 use remote::Remote;
+use progress::Reporter;
 use super::KResult;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::fs;
 
-use indicatif::{ProgressBar, ProgressStyle};
+use utime;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Action {
     Add,
     Remove,
-    Touch,
+    Touch(u64),
     Update
 }
 
 pub type Actions = Vec<(PathBuf, Action)>;
 
 impl Action {
-    fn get_code(&self) -> char {
+    pub fn get_code(&self) -> char {
         match *self {
             Action::Add => 'A',
             Action::Remove => 'R',
-            Action::Touch => 'T',
+            Action::Touch(_) => 'T',
             Action::Update => 'U'
         }
     }
@@ -32,7 +33,7 @@ fn compare_items(sitem: &StoreItem, ditem: &StoreItem) -> Option<Action> {
     if sitem.sha != ditem.sha {
         Some(Action::Update)
     } else if sitem.timestamp != ditem.timestamp {
-        None // decide if this is useful - Some(Action::Touch)
+        Some(Action::Touch(sitem.timestamp))
     } else {
         None
     }
@@ -72,25 +73,19 @@ pub fn show_actions(actions: Vec<(PathBuf, Action)>) {
     }
 }
 
-fn create_progress_bar(len: usize) -> ProgressBar {
-    let progress = ProgressBar::new(len as u64);
-
-    progress.set_style(ProgressStyle::default_bar()
-        .template("{elapsed:.white} [{wide_bar:.green}] {pos:>4.white}/{len:4.white} (ETA {eta}) {msg:.cyan}")
-        .progress_chars("=> "));
-
-    progress
+fn format_message(action: Action, name: &Path) -> String {
+    format!("{} {}",
+        action.get_code(),
+        name.to_string_lossy())
 }
 
-pub fn perform_pull_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>) -> KResult<()> {
-    let progress = create_progress_bar(actions.len());
+pub fn perform_pull_actions(actions: Vec<(PathBuf, Action)>, remote: &Remote) -> KResult<()> {
+
+    let reporter = Reporter::new(actions.len());
 
     for (name, action) in actions {
-        progress.inc(1);
-        let msg = format!("{} {}",
-            action.get_code(),
-            name.to_string_lossy());
-        progress.set_message(&msg);
+        reporter.inc();
+        reporter.report(&format_message(action, &name));
 
         match action {
             Action::Add |
@@ -100,26 +95,21 @@ pub fn perform_pull_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Re
             Action::Remove => {
                 fs::remove_file(name)?;
             },
-            Action::Touch => {
-                // touch the file here
+            Action::Touch(ts) => {
+                utime::set_file_times(&name, ts, ts)?;
             }
         };
     }
-
-    progress.finish_and_clear();
 
     Ok(())
 }
 
 pub fn perform_push_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>) -> KResult<()> {
-    let progress = create_progress_bar(actions.len());
+    let reporter = Reporter::new(actions.len());
 
     for (name, action) in actions {
-        progress.inc(1);
-        let msg = format!("{} {}",
-                          action.get_code(),
-                          name.to_string_lossy());
-        progress.set_message(&msg);
+        reporter.inc();
+        reporter.report(&format_message(action, &name));
 
         match action {
             Action::Add |
@@ -129,13 +119,11 @@ pub fn perform_push_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Re
             Action::Remove => {
                 remote.remove(&name)?;
             },
-            Action::Touch => {
-                // touch the file here
+            Action::Touch(ts) => {
+                remote.touch(&name, ts)?;
             }
         };
     }
-
-    progress.finish_and_clear();
 
     Ok(())
 }

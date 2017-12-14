@@ -21,7 +21,7 @@ impl Log for Logger {
             let raw = match record.level() {
                 LogLevel::Error => format!("[ERROR] {}: {}", module, record.args()),
                 LogLevel::Warn => format!("[WARN] {}: {}", module, record.args()),
-                _ => format!("{}", record.args())
+                _ => format!("{}: {}", module, record.args())
             };
 
             let coloured = if self.colours {
@@ -38,7 +38,7 @@ impl Log for Logger {
 
             if record.level() <= LogLevel::Warn {
                 let _ = writeln!(&mut io::stderr(), "{}", coloured);
-            } else if module == "kitchensync" {
+            } else /*if module == "kitchensync"*/ {
                 println!("{}", coloured);
             }
         }

@@ -80,16 +80,23 @@ Test deleting files
   $ cat world
   world
 
-  $ kitchensync sync --dry-run --delete ../a
-  syncing from ../a
-  R world
-  sync successful
-  $ cat world
-  world
+  $ kitchensync update
+  updating
+  A world
+  update successful
 
   $ kitchensync sync --dry-run --delete ../a
   syncing from ../a
   R world
   sync successful
+
+  $ cat world
+  world
+
+  $ kitchensync sync --delete ../a
+  syncing from ../a
+  R world
+  sync successful
+
   $ test -f world
   [1]

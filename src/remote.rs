@@ -3,6 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use url::{Url, ParseError};
+use utime;
 
 use s3::S3Remote;
 use super::KResult;
@@ -11,9 +12,10 @@ use super::KResult;
 // The Remote trait
 
 pub trait Remote {
-    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()>;
-    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()>;
-    fn remove(&mut self, name: &Path) -> io::Result<()>;
+    fn get(&self, name: &Path, dest: &Path) -> io::Result<()>;
+    fn put(&self, name: &Path, src: &Path) -> io::Result<()>;
+    fn remove(&self, name: &Path) -> io::Result<()>;
+    fn touch(&self, name: &Path, ts: u64) -> io::Result<()>;
 }
 
 pub fn from_location(location: &str) -> KResult<Box<Remote>> {
@@ -55,10 +57,14 @@ impl FileRemote {
 }
 
 impl Remote for FileRemote {
-    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
+    fn get(&self, name: &Path, dest: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("get {:?} -> {:?}", resolved, dest);
+
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
 
         let mut sink = File::create(dest)?;
         let mut src = File::open(resolved)?;
@@ -68,10 +74,14 @@ impl Remote for FileRemote {
         Ok(())
     }
 
-    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
+    fn put(&self, name: &Path, src: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("put {:?} -> {:?}", src, resolved);
+
+        if let Some(parent) = resolved.parent() {
+            fs::create_dir_all(parent)?;
+        }
 
         let mut sink = File::create(resolved)?;
         let mut src = File::open(src)?;
@@ -81,10 +91,14 @@ impl Remote for FileRemote {
         Ok(())
     }
 
-    fn remove(&mut self, name: &Path) -> io::Result<()> {
+    fn remove(&self, name: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("remove {:?}", resolved);
         fs::remove_file(resolved)
+    }
+
+    fn touch(&self, path: &Path, ts: u64) -> io::Result<()> {
+        utime::set_file_times(path, ts, ts)
     }
 }

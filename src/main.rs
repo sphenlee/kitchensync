@@ -2,6 +2,7 @@ extern crate clap;
 extern crate walkdir;
 extern crate sha1;
 #[macro_use] extern crate log;
+extern crate env_logger;
 extern crate colored;
 extern crate atty;
 extern crate rusoto_core;
@@ -9,19 +10,22 @@ extern crate rusoto_s3;
 extern crate url;
 extern crate rayon;
 extern crate indicatif;
+extern crate utime;
 
 mod store;
 mod update;
 mod remote;
 mod sync;
-mod logging;
+//mod logging;
 mod s3;
+mod progress;
 
 use store::Store;
 
 use std::path::Path;
 use std::fs;
 use std::io;
+use std::env;
 
 const KSYNC: &'static str = ".kitchensync";
 const KSYNCREMOTE: &'static str = ".kitchensync-remote";
@@ -32,15 +36,21 @@ fn main() {
     let args = parse_args();
 
     let level = if args.is_present("quiet") {
-        log::LogLevelFilter::Off
+        log::LevelFilter::Off
     } else {
         match args.occurrences_of("verbose") {
-            0 => log::LogLevelFilter::Info,
-            1 => log::LogLevelFilter::Debug,
-            _ => log::LogLevelFilter::Trace
+            0 => log::LevelFilter::Info,
+            1 => log::LevelFilter::Debug,
+            _ => log::LevelFilter::Trace
         }
     };
-    logging::init_with_level(level).unwrap();
+
+    let mut builder = env_logger::Builder::new();
+    builder.filter(None, level);
+    if let Ok(var) = env::var("KSYNC_LOG") {
+        builder.parse(&var);
+    }
+    builder.init();
 
     std::process::exit(match dispatch_command(args) {
         Ok(()) => 0,
@@ -124,7 +134,7 @@ fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
     }
 }
 
-struct UpdateOpts {
+pub struct UpdateOpts {
     deleted: bool
 }
 
@@ -137,15 +147,7 @@ fn do_update(opts: UpdateOpts) -> KResult<()> {
     let files = update::get_files(".")?;
 
     debug!("looking for changes");
-    let (mut updated_store, deleted) = update::update_store(store, files)?;
-
-    if opts.deleted {
-        debug!("reporting deleted files");
-        update::report_deleted(deleted);
-    } else {
-        debug!("re-add deleted files to the store");
-        updated_store.files_mut().extend(deleted);
-    }
+    let updated_store = update::update_store(&opts, store, files)?;
 
     updated_store.write_to_file(KSYNC)?;
 
@@ -175,7 +177,7 @@ fn do_sync(opts: SyncOpts) -> KResult<()> {
     debug!("get remote store locally");
     let mut got_remote_store = true;
     remote.get(ksync, ksyncremote).or_else(|err| {
-        if err.kind() == io::ErrorKind::NotFound {
+        if err.kind() == io::ErrorKind::NotFound && opts.push {
             got_remote_store = false;
             Ok(())
         } else {
@@ -223,7 +225,7 @@ fn do_sync(opts: SyncOpts) -> KResult<()> {
                 fs::remove_file(ksyncremote)?;
             }
         } else {
-            sync::perform_pull_actions(actions, &mut remote)?;
+            sync::perform_pull_actions(actions, &mut *remote)?;
 
             debug!("update local store");
             fs::rename(ksyncremote, ksync)?;
