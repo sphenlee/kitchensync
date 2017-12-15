@@ -16,7 +16,7 @@ mod store;
 mod update;
 mod remote;
 mod sync;
-//mod logging;
+mod logging;
 mod s3;
 mod progress;
 
@@ -47,6 +47,13 @@ fn main() {
 
     let mut builder = env_logger::Builder::new();
     builder.filter(None, level);
+
+    if atty::is(atty::Stream::Stderr) {
+        builder.format(logging::output_log_colour);
+    } else {
+        builder.format(logging::output_log);
+    }
+
     if let Ok(var) = env::var("KSYNC_LOG") {
         builder.parse(&var);
     }
