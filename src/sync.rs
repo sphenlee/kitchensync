@@ -12,18 +12,18 @@ use utime;
 pub enum Action {
     Add,
     Remove,
-    Touch(u64),
+    Touch,
     Update
 }
 
-pub type Actions = Vec<(PathBuf, Action)>;
+pub type Actions = Vec<(PathBuf, u64, Action)>;
 
 impl Action {
     pub fn get_code(&self) -> char {
         match *self {
             Action::Add => 'A',
             Action::Remove => 'R',
-            Action::Touch(_) => 'T',
+            Action::Touch => 'T',
             Action::Update => 'U'
         }
     }
@@ -33,7 +33,7 @@ fn compare_items(sitem: &StoreItem, ditem: &StoreItem) -> Option<Action> {
     if sitem.sha != ditem.sha {
         Some(Action::Update)
     } else if sitem.timestamp != ditem.timestamp {
-        Some(Action::Touch(sitem.timestamp))
+        Some(Action::Touch)
     } else {
         None
     }
@@ -51,22 +51,22 @@ pub fn get_actions(mut dest: Store, src: Store) -> (Actions, Actions) {
                     compare_items(&sitem, &ditem)
                 }
             }.map(|action| {
-                (name.clone(), action)
+                (name.clone(), sitem.timestamp, action)
             })
         })
         .collect();
 
     let removes = dest.into_iter()
         .map(|(name, _ditem)| {
-            (name, Action::Remove)
+            (name, 0, Action::Remove)
         })
         .collect();
 
     (actions, removes)
 }
 
-pub fn show_actions(actions: Vec<(PathBuf, Action)>) {
-    for (name, action) in actions {
+pub fn show_actions(actions: Actions) {
+    for (name, _ts, action) in actions {
         println!("{} {}",
             action.get_code(),
             name.to_string_lossy());
@@ -79,11 +79,11 @@ fn format_message(action: Action, name: &Path) -> String {
         name.to_string_lossy())
 }
 
-pub fn perform_pull_actions(actions: Vec<(PathBuf, Action)>, remote: &Remote) -> KResult<()> {
+pub fn perform_pull_actions(actions: Actions, remote: &Remote) -> KResult<()> {
 
     let reporter = Reporter::new(actions.len());
 
-    for (name, action) in actions {
+    for (name, ts, action) in actions {
         reporter.inc();
         reporter.report(&format_message(action, &name));
 
@@ -91,11 +91,12 @@ pub fn perform_pull_actions(actions: Vec<(PathBuf, Action)>, remote: &Remote) ->
             Action::Add |
             Action::Update => {
                 remote.get(&name, &name)?;
+                utime::set_file_times(&name, ts, ts)?;
             },
             Action::Remove => {
                 fs::remove_file(name)?;
             },
-            Action::Touch(ts) => {
+            Action::Touch => {
                 utime::set_file_times(&name, ts, ts)?;
             }
         };
@@ -104,10 +105,10 @@ pub fn perform_pull_actions(actions: Vec<(PathBuf, Action)>, remote: &Remote) ->
     Ok(())
 }
 
-pub fn perform_push_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Remote>) -> KResult<()> {
+pub fn perform_push_actions(actions: Actions, remote: &mut Box<Remote>) -> KResult<()> {
     let reporter = Reporter::new(actions.len());
 
-    for (name, action) in actions {
+    for (name, ts, action) in actions {
         reporter.inc();
         reporter.report(&format_message(action, &name));
 
@@ -115,11 +116,12 @@ pub fn perform_push_actions(actions: Vec<(PathBuf, Action)>, remote: &mut Box<Re
             Action::Add |
             Action::Update => {
                 remote.put(&name, &name)?;
+                remote.touch(&name, ts)?;
             },
             Action::Remove => {
                 remote.remove(&name)?;
             },
-            Action::Touch(ts) => {
+            Action::Touch => {
                 remote.touch(&name, ts)?;
             }
         };

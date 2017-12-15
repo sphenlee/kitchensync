@@ -76,12 +76,15 @@ fn compare_file(reporter: &Reporter, existing: StoreItem, filestat: &FileStat) -
 
     if existing.timestamp != filestat.timestamp {
         trace!("timestamp changed {:?} {:?}", filestat, existing);
+        output.timestamp = filestat.timestamp;
+
         let sha = get_sha1(&filestat.name)?;
         if existing.sha != sha {
             trace!("sha changed {:?} {:?}", filestat, existing);
             reporter.report(format!("U {}", filestat.name.to_string_lossy()));
             output.sha = sha;
-            output.timestamp = filestat.timestamp;
+        } else {
+            reporter.report(format!("T {}", filestat.name.to_string_lossy()));
         }
     }
 
