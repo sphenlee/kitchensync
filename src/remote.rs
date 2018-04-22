@@ -11,7 +11,7 @@ use super::KResult;
 // ________________________________________________________
 // The Remote trait
 
-pub trait Remote {
+pub trait Remote: Sync {
     fn get(&self, name: &Path, dest: &Path) -> io::Result<()>;
     fn put(&self, name: &Path, src: &Path) -> io::Result<()>;
     fn remove(&self, name: &Path) -> io::Result<()>;

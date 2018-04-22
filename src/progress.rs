@@ -30,7 +30,9 @@ impl Reporter {
         if !self.tty {
             println!("{}", msg.as_ref());
         } else {
-            self.progress.set_message(msg.as_ref());
+            let mut strmsg = msg.as_ref().to_owned();
+            strmsg.truncate(40);
+            self.progress.set_message(&strmsg);
         }
     }
 }

@@ -47,7 +47,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
 fn get_sha1(name: &Path) -> KResult<String> {
     let mut h = sha1::Sha1::new();
     let mut fp = File::open(name)?;
-    let mut buf = [0u8; 4096];
+    let mut buf = vec![0; 4096];
 
     loop {
         let read = fp.read(&mut buf)?;
@@ -70,30 +70,29 @@ fn added_file(reporter: &Reporter, filestat: &FileStat) -> KResult<StoreItem> {
     })
 }
 
-fn compare_file(reporter: &Reporter, existing: StoreItem, filestat: &FileStat) -> KResult<StoreItem> {
-    let mut output = existing.clone();
-    output.seen = true;
+fn compare_file(reporter: &Reporter, mut item: StoreItem, filestat: &FileStat) -> KResult<StoreItem> {
+    item.seen = true;
 
-    if existing.timestamp != filestat.timestamp {
-        trace!("timestamp changed {:?} {:?}", filestat, existing);
-        output.timestamp = filestat.timestamp;
+    if item.timestamp != filestat.timestamp {
+        trace!("timestamp changed {:?} {:?}", filestat, item);
+        item.timestamp = filestat.timestamp;
 
         let sha = get_sha1(&filestat.name)?;
-        if existing.sha != sha {
-            trace!("sha changed {:?} {:?}", filestat, existing);
+        if item.sha != sha {
+            trace!("sha changed {:?} {:?}", filestat, item);
             reporter.report(format!("U {}", filestat.name.to_string_lossy()));
-            output.sha = sha;
+            item.sha = sha;
         } else {
             reporter.report(format!("T {}", filestat.name.to_string_lossy()));
         }
     }
 
-    Ok(output)
+    Ok(item)
 }
 
 pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -> KResult<Store>
 {
-    let mut updated_store = Vec::new();
+    let mut updated_store = Store::empty();
     let reporter = Reporter::new(files.len());
 
     for file in files {
@@ -105,7 +104,7 @@ pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -
             Some(item) => compare_file(&reporter, item, &file)?
         };
 
-        updated_store.push((file.name, updated_item));
+        updated_store.files_mut().insert(file.name, updated_item);
     }
 
     if opts.deleted {
@@ -115,8 +114,8 @@ pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -
         }
     } else {
         debug!("re-add deleted files to the store");
-        updated_store.extend(store.into_iter());
+        updated_store.files_mut().extend(store.into_iter());
     }
 
-    Ok(updated_store.into_iter().collect())
+    Ok(updated_store)
 }

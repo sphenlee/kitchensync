@@ -5,7 +5,9 @@ use super::KResult;
 
 use std::path::{Path, PathBuf};
 use std::fs;
+use std::io;
 
+use rayon::prelude::*;
 use utime;
 
 #[derive(Debug, Copy, Clone)]
@@ -83,7 +85,8 @@ pub fn perform_pull_actions(actions: Actions, remote: &Remote) -> KResult<()> {
 
     let reporter = Reporter::new(actions.len());
 
-    for (name, ts, action) in actions {
+    actions.into_par_iter().map(|(name, ts, action)| {
+    //for (name, ts, action) in actions {
         reporter.inc();
         reporter.report(&format_message(action, &name));
 
@@ -100,7 +103,10 @@ pub fn perform_pull_actions(actions: Actions, remote: &Remote) -> KResult<()> {
                 utime::set_file_times(&name, ts, ts)?;
             }
         };
-    }
+
+        Ok(())
+    //}
+    }).collect::<io::Result<Vec<()>>>()?;
 
     Ok(())
 }
