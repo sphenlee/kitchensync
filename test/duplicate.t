@@ -35,6 +35,7 @@ Move a file and sync again
   updating
   getting files
   looking for changes
+  checking "world"
   A world
   reporting deleted files
   D hello

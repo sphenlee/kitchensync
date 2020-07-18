@@ -2,21 +2,23 @@
 name = "kitchensync"
 version = "0.1.0"
 authors = ["Stephen Lee <sphen.lee@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 clap = "2.26.2"
-walkdir = "0.1.8"
-url = "1.2.0"
+walkdir = "2"
+url = "2"
 sha1 = "0.2.0"
 log = "0.4.0-rc.1"
-env_logger = "0.5.0-rc.1"
+env_logger = "0.7"
 colored = "1.5"
 atty = "0.2.2"
-rusoto_core = "0.30.0"
-rusoto_s3 = "0.30.0"
-rayon = "0.8.2"
-indicatif = "0.7.0"
-utime = "0.2.0"
+rusoto_core = "*"
+rusoto_s3 = "*"
+indicatif = "0.15"
+utime = "0.3"
+tokio = { version = "0.2", features = ["io-util"] }
+clout = "0.2"
 
 [[bin]]
 name = "kitchensync"

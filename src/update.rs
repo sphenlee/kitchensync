@@ -1,30 +1,32 @@
-use walkdir::{WalkDir, DirEntry, WalkDirIterator};
+use clout::{debug, info};
 use sha1;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::File;
 use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use walkdir::{DirEntry, WalkDir};
 
-use store::{Store, StoreItem};
-use progress::Reporter;
-use super::{KResult, UpdateOpts};
+use crate::progress::Reporter;
+use crate::store::{Store, StoreItem};
+use crate::{KResult, UpdateOpts};
 
 #[derive(Debug)]
 pub struct FileStat {
     name: PathBuf,
-    timestamp: u64
+    timestamp: i64,
 }
 
-fn systemtime_to_u64(t: SystemTime) -> u64 {
+fn systemtime_to_i64(t: SystemTime) -> i64 {
     let dur = t.duration_since(UNIX_EPOCH).unwrap();
-    dur.as_secs()
+    dur.as_secs() as i64
 }
 
 fn is_hidden(entry: &DirEntry) -> bool {
-    entry.file_name()
-         .to_str()
-         .map(|s| s.len() > 1 && s.starts_with("."))
-         .unwrap_or(false)
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.len() > 1 && s.starts_with("."))
+        .unwrap_or(false)
 }
 
 pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
@@ -38,7 +40,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
             let meta = entry.metadata().unwrap();
             FileStat {
                 name,
-                timestamp: systemtime_to_u64(meta.modified().unwrap())
+                timestamp: systemtime_to_i64(meta.modified().unwrap()),
             }
         })
         .collect())
@@ -66,20 +68,24 @@ fn added_file(reporter: &Reporter, filestat: &FileStat) -> KResult<StoreItem> {
     Ok(StoreItem {
         sha: get_sha1(&filestat.name)?,
         timestamp: filestat.timestamp,
-        seen: true
+        seen: true,
     })
 }
 
-fn compare_file(reporter: &Reporter, mut item: StoreItem, filestat: &FileStat) -> KResult<StoreItem> {
+fn compare_file(
+    reporter: &Reporter,
+    mut item: StoreItem,
+    filestat: &FileStat,
+) -> KResult<StoreItem> {
     item.seen = true;
 
     if item.timestamp != filestat.timestamp {
-        trace!("timestamp changed {:?} {:?}", filestat, item);
+        debug!("timestamp changed {:?} {:?}", filestat, item);
         item.timestamp = filestat.timestamp;
 
         let sha = get_sha1(&filestat.name)?;
         if item.sha != sha {
-            trace!("sha changed {:?} {:?}", filestat, item);
+            debug!("sha changed {:?} {:?}", filestat, item);
             reporter.report(format!("U {}", filestat.name.to_string_lossy()));
             item.sha = sha;
         } else {
@@ -90,30 +96,29 @@ fn compare_file(reporter: &Reporter, mut item: StoreItem, filestat: &FileStat) -
     Ok(item)
 }
 
-pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -> KResult<Store>
-{
+pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -> KResult<Store> {
     let mut updated_store = Store::empty();
     let reporter = Reporter::new(files.len());
 
     for file in files {
-        trace!("checking {:?}", file.name);
+        info!("checking {:?}", file.name);
         reporter.inc();
 
         let updated_item = match store.files_mut().remove(&file.name) {
             None => added_file(&reporter, &file)?,
-            Some(item) => compare_file(&reporter, item, &file)?
+            Some(item) => compare_file(&reporter, item, &file)?,
         };
 
         updated_store.files_mut().insert(file.name, updated_item);
     }
 
     if opts.deleted {
-        debug!("reporting deleted files");
+        info!("reporting deleted files");
         for (name, _item) in store.into_iter() {
             reporter.report(format!("D {}", name.to_string_lossy()));
         }
     } else {
-        debug!("re-add deleted files to the store");
+        info!("re-add deleted files to the store");
         updated_store.files_mut().extend(store.into_iter());
     }
 

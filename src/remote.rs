@@ -1,24 +1,25 @@
+use clout::debug;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use url::{Url, ParseError};
+use url::{ParseError, Url};
 use utime;
 
-use s3::S3Remote;
 use super::KResult;
+use crate::s3::S3Remote;
 
 // ________________________________________________________
 // The Remote trait
 
 pub trait Remote: Sync {
-    fn get(&self, name: &Path, dest: &Path) -> io::Result<()>;
-    fn put(&self, name: &Path, src: &Path) -> io::Result<()>;
-    fn remove(&self, name: &Path) -> io::Result<()>;
-    fn touch(&self, name: &Path, ts: u64) -> io::Result<()>;
+    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()>;
+    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()>;
+    fn remove(&mut self, name: &Path) -> io::Result<()>;
+    fn touch(&mut self, name: &Path, ts: i64) -> io::Result<()>;
 }
 
-pub fn from_location(location: &str) -> KResult<Box<Remote>> {
+pub fn from_location(location: &str) -> KResult<Box<dyn Remote>> {
     //let cwd = "file://" + env::current_dir().unwrap();
     //println!("{:?}", cwd);
     //let base = try!(Url::parse(cwd.to_str().unwrap()));
@@ -27,17 +28,13 @@ pub fn from_location(location: &str) -> KResult<Box<Remote>> {
         Err(ParseError::RelativeUrlWithoutBase) => {
             // URL without a base is just a relative file path
             FileRemote::new(location.into())
+        }
+        Err(e) => Err(e.into()),
+        Ok(url) => match url.scheme() {
+            "file" => FileRemote::new(url.path()),
+            "s3" => S3Remote::new(&url),
+            scheme => Err(format!("unsupported URL scheme {}", scheme).into()),
         },
-        Err(e) => {
-            Err(e.into())
-        }
-        Ok(url) => {
-            match url.scheme() {
-                "file" => FileRemote::new(url.path()),
-                "s3" => S3Remote::new(&url),
-                scheme => Err(format!("unsupported URL scheme {}", scheme).into())
-            }
-        }
     }
 }
 
@@ -45,19 +42,17 @@ pub fn from_location(location: &str) -> KResult<Box<Remote>> {
 // Implementation for local files
 
 struct FileRemote {
-    root: PathBuf
+    root: PathBuf,
 }
 
 impl FileRemote {
-    fn new(root: &str) -> KResult<Box<Remote>> {
-        Ok(Box::new(FileRemote {
-            root: root.into()
-        }))
+    fn new(root: &str) -> KResult<Box<dyn Remote>> {
+        Ok(Box::new(FileRemote { root: root.into() }))
     }
 }
 
 impl Remote for FileRemote {
-    fn get(&self, name: &Path, dest: &Path) -> io::Result<()> {
+    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("get {:?} -> {:?}", resolved, dest);
@@ -74,7 +69,7 @@ impl Remote for FileRemote {
         Ok(())
     }
 
-    fn put(&self, name: &Path, src: &Path) -> io::Result<()> {
+    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("put {:?} -> {:?}", src, resolved);
@@ -91,14 +86,14 @@ impl Remote for FileRemote {
         Ok(())
     }
 
-    fn remove(&self, name: &Path) -> io::Result<()> {
+    fn remove(&mut self, name: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("remove {:?}", resolved);
         fs::remove_file(resolved)
     }
 
-    fn touch(&self, path: &Path, ts: u64) -> io::Result<()> {
+    fn touch(&mut self, path: &Path, ts: i64) -> io::Result<()> {
         utime::set_file_times(path, ts, ts)
     }
 }
