@@ -1,10 +1,11 @@
 use clout::debug;
-use std::fs::{self, File};
-use std::io;
+use tokio::fs::{File, self};
+use tokio::io;
 use std::path::{Path, PathBuf};
 
 use url::{ParseError, Url};
 use utime;
+use async_trait::async_trait;
 
 use super::KResult;
 use crate::s3::S3Remote;
@@ -12,11 +13,12 @@ use crate::s3::S3Remote;
 // ________________________________________________________
 // The Remote trait
 
+#[async_trait]
 pub trait Remote: Sync {
-    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()>;
-    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()>;
-    fn remove(&mut self, name: &Path) -> io::Result<()>;
-    fn touch(&mut self, name: &Path, ts: i64) -> io::Result<()>;
+    async fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()>;
+    async fn put(&mut self, name: &Path, src: &Path) -> io::Result<()>;
+    async fn remove(&mut self, name: &Path) -> io::Result<()>;
+    async fn touch(&mut self, name: &Path, ts: i64) -> io::Result<()>;
 }
 
 pub fn from_location(location: &str) -> KResult<Box<dyn Remote>> {
@@ -51,49 +53,50 @@ impl FileRemote {
     }
 }
 
+#[async_trait]
 impl Remote for FileRemote {
-    fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
+    async fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("get {:?} -> {:?}", resolved, dest);
 
         if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).await?;
         }
 
-        let mut sink = File::create(dest)?;
-        let mut src = File::open(resolved)?;
+        let mut sink = File::create(dest).await?;
+        let mut src = File::open(resolved).await?;
 
-        io::copy(&mut src, &mut sink)?;
+        io::copy(&mut src, &mut sink).await?;
 
         Ok(())
     }
 
-    fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
+    async fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("put {:?} -> {:?}", src, resolved);
 
         if let Some(parent) = resolved.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).await?;
         }
 
-        let mut sink = File::create(resolved)?;
-        let mut src = File::open(src)?;
+        let mut sink = File::create(resolved).await?;
+        let mut src = File::open(src).await?;
 
-        io::copy(&mut src, &mut sink)?;
+        io::copy(&mut src, &mut sink).await?;
 
         Ok(())
     }
 
-    fn remove(&mut self, name: &Path) -> io::Result<()> {
+    async fn remove(&mut self, name: &Path) -> io::Result<()> {
         let resolved = self.root.join(name);
 
         debug!("remove {:?}", resolved);
-        fs::remove_file(resolved)
+        fs::remove_file(resolved).await
     }
 
-    fn touch(&mut self, path: &Path, ts: i64) -> io::Result<()> {
+    async fn touch(&mut self, path: &Path, ts: i64) -> io::Result<()> {
         utime::set_file_times(path, ts, ts)
     }
 }

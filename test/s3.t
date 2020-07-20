@@ -77,3 +77,17 @@ Test deleting files
 
   $ aws s3 ls s3://kitchensync-test/cram/b/world
   [1]
+
+Test pulling
+
+  $ cd ..
+  $ mkdir b
+  $ cd b
+  $ kitchensync sync s3://kitchensync-test/cram/b/
+  syncing from s3://kitchensync-test/cram/b/
+  A hello
+  sync successful
+  $ cat .kitchensync
+  22596363b3de40b06f981fb85d82312e8c0ed511 1595206800 hello
+  $ cat hello
+  hello world

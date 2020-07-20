@@ -72,7 +72,7 @@ fn format_message(action: Action, name: &Path) -> String {
     format!("{} {}", action.get_code(), name.to_string_lossy())
 }
 
-pub fn perform_pull_actions(actions: Actions, remote: &mut dyn Remote) -> KResult<()> {
+pub async fn perform_pull_actions(actions: Actions, remote: &mut dyn Remote) -> KResult<()> {
     let reporter = Reporter::new(actions.len());
 
     for (name, ts, action) in actions {
@@ -81,7 +81,7 @@ pub fn perform_pull_actions(actions: Actions, remote: &mut dyn Remote) -> KResul
 
         match action {
             Action::Add | Action::Update => {
-                remote.get(&name, &name)?;
+                remote.get(&name, &name).await?;
                 utime::set_file_times(&name, ts, ts)?;
             }
             Action::Remove => {
@@ -96,7 +96,7 @@ pub fn perform_pull_actions(actions: Actions, remote: &mut dyn Remote) -> KResul
     Ok(())
 }
 
-pub fn perform_push_actions(actions: Actions, remote: &mut dyn Remote) -> KResult<()> {
+pub async fn perform_push_actions(actions: Actions, remote: &mut dyn Remote) -> KResult<()> {
     let reporter = Reporter::new(actions.len());
 
     for (name, ts, action) in actions {
@@ -105,14 +105,14 @@ pub fn perform_push_actions(actions: Actions, remote: &mut dyn Remote) -> KResul
 
         match action {
             Action::Add | Action::Update => {
-                remote.put(&name, &name)?;
-                remote.touch(&name, ts)?;
+                remote.put(&name, &name).await?;
+                remote.touch(&name, ts).await?;
             }
             Action::Remove => {
-                remote.remove(&name)?;
+                remote.remove(&name).await?;
             }
             Action::Touch => {
-                remote.touch(&name, ts)?;
+                remote.touch(&name, ts).await?;
             }
         };
     }

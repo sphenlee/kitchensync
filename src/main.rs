@@ -14,13 +14,15 @@ use store::Store;
 use std::fs;
 use std::io;
 use std::path::Path;
+use tokio;
 
 const KSYNC: &'static str = ".kitchensync";
 const KSYNCREMOTE: &'static str = ".kitchensync-remote";
 
 type KResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = parse_args();
 
     let env = env_logger::Env::new()
@@ -35,7 +37,7 @@ fn main() {
         .done()
         .expect("error setting up clout");
 
-    std::process::exit(match dispatch_command(args) {
+    std::process::exit(match dispatch_command(args).await {
         Ok(()) => 0,
         Err(e) => {
             error!("{}", e);
@@ -103,7 +105,7 @@ fn parse_args() -> clap::ArgMatches<'static> {
     args
 }
 
-fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
+async fn dispatch_command(args: clap::ArgMatches<'_>) -> KResult<()> {
     match args.subcommand() {
         ("update", Some(subargs)) => {
             let opts = UpdateOpts {
@@ -118,7 +120,7 @@ fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
                 dry_run: subargs.is_present("dry-run"),
                 delete: subargs.is_present("delete"),
             };
-            do_sync(opts)
+            do_sync(opts).await
         }
         _ => panic!("subcommands are supposed to be enforced by clap"),
     }
@@ -153,7 +155,7 @@ struct SyncOpts {
     delete: bool,
 }
 
-fn do_sync(opts: SyncOpts) -> KResult<()> {
+async fn do_sync(opts: SyncOpts) -> KResult<()> {
     // get the remote ksync file locally
     let mut remote = remote::from_location(&opts.target)?;
 
@@ -168,7 +170,7 @@ fn do_sync(opts: SyncOpts) -> KResult<()> {
 
     info!("get remote store locally");
     let mut got_remote_store = true;
-    remote.get(ksync, ksyncremote).or_else(|err| {
+    remote.get(ksync, ksyncremote).await.or_else(|err| {
         if err.kind() == io::ErrorKind::NotFound && opts.push {
             got_remote_store = false;
             Ok(())
@@ -207,17 +209,17 @@ fn do_sync(opts: SyncOpts) -> KResult<()> {
         info!("performing sync");
 
         if opts.push {
-            sync::perform_push_actions(actions, &mut *remote)?;
+            sync::perform_push_actions(actions, &mut *remote).await?;
 
             info!("uploading store to remote");
-            remote.put(ksync, ksync)?;
+            remote.put(ksync, ksync).await?;
 
             if got_remote_store {
                 info!("removing local copy of remote store");
                 fs::remove_file(ksyncremote)?;
             }
         } else {
-            sync::perform_pull_actions(actions, &mut *remote)?;
+            sync::perform_pull_actions(actions, &mut *remote).await?;
 
             info!("update local store");
             fs::rename(ksyncremote, ksync)?;

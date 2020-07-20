@@ -19,6 +19,9 @@ indicatif = "0.15"
 utime = "0.3"
 tokio = { version = "0.2", features = ["io-util"] }
 clout = "0.2"
+async-trait = "0.1"
+futures = "*"
+tokio-util = "0.3"
 
 [[bin]]
 name = "kitchensync"
