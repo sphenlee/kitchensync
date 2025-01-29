@@ -122,6 +122,7 @@ impl Remote for FileRemote {
     }
 
     async fn touch(&mut self, path: &Path, ts: i64) -> Result<()> {
+        #[allow(deprecated)]
         utime::set_file_times(path, ts, ts)?;
         Ok(())
     }

@@ -82,12 +82,14 @@ pub async fn perform_pull_actions(actions: Actions, remote: &mut dyn Remote) -> 
         match action {
             Action::Add | Action::Update => {
                 remote.get(&name, &name).await?;
+                #[allow(deprecated)]
                 utime::set_file_times(&name, ts, ts)?;
             }
             Action::Remove => {
                 fs::remove_file(name)?;
             }
             Action::Touch => {
+                #[allow(deprecated)]
                 utime::set_file_times(&name, ts, ts)?;
             }
         };
