@@ -7,14 +7,18 @@ Test s3 functionality
 
   $ echo hello > hello
   $ echo world > world
-  $ touch -d 0 hello
-  $ touch -d 0 world
+  $ touch -d 2020-01-01T00:00:00 hello
+  $ touch -d 2020-01-01T00:00:00 world
 
   $ kitchensync update
   updating
   A hello
   A world
   update successful
+
+Configure AWS
+
+  $ export AWS_DEFAULT_REGION=us-east-1
 
 Now push to s3
 
@@ -32,7 +36,7 @@ Now push to s3
 Make a change in a and update
 
   $ echo "hello world" > hello
-  $ touch -d 1 hello
+  $ touch -d 2020-01-01T00:00:01 hello
 
   $ kitchensync update
   updating
@@ -88,6 +92,6 @@ Test pulling
   A hello
   sync successful
   $ cat .kitchensync
-  22596363b3de40b06f981fb85d82312e8c0ed511 1595206800 hello
+  22596363b3de40b06f981fb85d82312e8c0ed511 1577836801 hello
   $ cat hello
   hello world
