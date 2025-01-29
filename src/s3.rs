@@ -1,4 +1,4 @@
-use clout::{debug, warn};
+use clout::{debug};
 use rusoto_s3::{DeleteObjectRequest, GetObjectRequest, PutObjectRequest, S3Client, StreamingBody, S3, GetObjectError};
 use tokio::fs::{self, File};
 use tokio::io;
@@ -8,9 +8,15 @@ use url::Url;
 use async_trait::async_trait;
 
 use super::KResult;
-use crate::remote::Remote;
+use crate::remote::{self, Remote};
 use rusoto_core::{Region, RusotoError};
 use futures::TryStreamExt;
+
+impl<T: std::error::Error + 'static> From<RusotoError<T>> for remote::Error {
+    fn from(err: RusotoError<T>) -> Self {
+        remote::Error::Other(err.to_string())
+    }
+}
 
 pub struct S3Remote {
     client: S3Client,
@@ -33,7 +39,7 @@ impl S3Remote {
 
 #[async_trait]
 impl Remote for S3Remote {
-    async fn get(&mut self, name: &Path, dest: &Path) -> io::Result<()> {
+    async fn get(&mut self, name: &Path, dest: &Path) -> remote::Result<()> {
         // TODO don't allocate so much stuff here
 
         let mut req = GetObjectRequest::default();
@@ -52,12 +58,9 @@ impl Remote for S3Remote {
             match err {
                 RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
                     debug!("s3 no such key {:?}", key);
-                    io::Error::new(io::ErrorKind::NotFound, key)
+                    remote::Error::NotFound(PathBuf::from(key))
                 },
-                _ => {
-                    warn!("s3 get error {:?}", err);
-                    io::Error::new(io::ErrorKind::NotFound, err)
-                }
+                err => err.into()
             }
         })?;
         let mut body = resp.body.expect("no S3 body returned").into_async_read();
@@ -66,7 +69,7 @@ impl Remote for S3Remote {
         Ok(())
     }
 
-    async fn put(&mut self, name: &Path, src: &Path) -> io::Result<()> {
+    async fn put(&mut self, name: &Path, src: &Path) -> remote::Result<()> {
         // TODO don't allocate so much stuff here
         let mut req = PutObjectRequest::default();
         req.bucket = self.bucket.clone();
@@ -84,14 +87,11 @@ impl Remote for S3Remote {
         debug!("put {:?} -> s3://{}/{}", src, req.bucket, req.key);
 
         let client = self.client.clone();
-        client.put_object(req).await.map_err(|err| {
-            warn!("s3 put error: {:?}", err);
-            io::Error::new(io::ErrorKind::Other, err)
-        })?;
+        client.put_object(req).await?;
         Ok(())
     }
 
-    async fn remove(&mut self, name: &Path) -> io::Result<()> {
+    async fn remove(&mut self, name: &Path) -> remote::Result<()> {
         let mut req = DeleteObjectRequest::default();
         req.bucket = self.bucket.clone();
         req.key = self.prefix.join(name).to_string_lossy().into();
@@ -99,14 +99,11 @@ impl Remote for S3Remote {
         debug!("remove s3://{}/{}", req.bucket, req.key);
 
         let client = self.client.clone();
-        client.delete_object(req).await.map_err(|err| {
-            warn!("s3 rm error: {:?}", err);
-            io::Error::new(io::ErrorKind::Other, err)
-        })?;
+        client.delete_object(req).await?;
         Ok(())
     }
 
-    async fn touch(&mut self, _path: &Path, _ts: i64) -> io::Result<()> {
+    async fn touch(&mut self, _path: &Path, _ts: i64) -> remote::Result<()> {
         // can't touch files in S3
         Ok(())
     }

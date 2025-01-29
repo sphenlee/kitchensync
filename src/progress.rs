@@ -15,6 +15,7 @@ impl Reporter {
 
         progress.set_style(ProgressStyle::default_bar()
             .template("{elapsed:.white} [{wide_bar:.green}] {pos:>4.white}/{len:4.white} (ETA {eta}) {msg:.cyan}")
+            .expect("invalid template")
             .progress_chars("=> "));
 
         Reporter { progress }

@@ -1,5 +1,5 @@
 use clout::{debug, info};
-use sha1;
+use sha1::{Digest, Sha1};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -47,9 +47,9 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
 }
 
 fn get_sha1(name: &Path) -> KResult<String> {
-    let mut h = sha1::Sha1::new();
+    let mut h = Sha1::new();
     let mut fp = File::open(name)?;
-    let mut buf = vec![0; 4096];
+    let mut buf = vec![0; 4096*16];
 
     loop {
         let read = fp.read(&mut buf)?;
@@ -59,7 +59,8 @@ fn get_sha1(name: &Path) -> KResult<String> {
         h.update(&buf[..read]);
     }
 
-    Ok(h.digest().to_string())
+    let result = h.finalize();
+    Ok(format!("{:x}", result))
 }
 
 fn added_file(reporter: &Reporter, filestat: &FileStat) -> KResult<StoreItem> {

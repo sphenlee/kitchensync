@@ -12,8 +12,8 @@ mod update;
 use store::Store;
 
 use std::fs;
-use std::io;
 use std::path::Path;
+use std::process::ExitCode;
 use tokio;
 
 const KSYNC: &'static str = ".kitchensync";
@@ -22,7 +22,7 @@ const KSYNCREMOTE: &'static str = ".kitchensync-remote";
 type KResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> ExitCode {
     let args = parse_args();
 
     let env = env_logger::Env::new()
@@ -32,71 +32,76 @@ async fn main() {
     builder.init();
 
     clout::init()
-        .with_verbose(args.occurrences_of("verbose") as u8)
-        .with_quiet(args.is_present("quiet"))
+        .with_verbose(args.get_count("verbose") as u8)
+        .with_quiet(args.get_flag("quiet"))
         .done()
         .expect("error setting up clout");
 
-    std::process::exit(match dispatch_command(args).await {
-        Ok(()) => 0,
+    match dispatch_command(args).await {
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             error!("{}", e);
-            1
+            ExitCode::FAILURE
         }
-    });
+    }
 }
 
-fn parse_args() -> clap::ArgMatches<'static> {
-    let args = clap::App::new("kitchensync")
+fn parse_args() -> clap::ArgMatches {
+    let args = clap::Command::new("kitchensync")
         .version("0.1")
         .author("Stephen Lee <sphen.lee@gmail.com>")
         .about("Serverless file synchronisation tool")
-        .setting(clap::AppSettings::SubcommandRequired)
+        .subcommand_required(true)
         .arg(
-            clap::Arg::with_name("verbose")
+            clap::Arg::new("verbose")
                 .long("verbose")
-                .short("v")
-                .multiple(true)
+                .short('v')
+                .action(clap::ArgAction::Count)
                 .help("Output more logging"),
         )
         .arg(
-            clap::Arg::with_name("quiet")
+            clap::Arg::new("quiet")
                 .long("quiet")
-                .short("q")
+                .short('q')
+                .action(clap::ArgAction::SetTrue)
                 .help("Silence all logging"),
         )
         .subcommand(
-            clap::SubCommand::with_name("update")
+            clap::Command::new("update")
                 .about("Updates the local store")
                 .arg(
-                    clap::Arg::with_name("deleted")
+                    clap::Arg::new("deleted")
                         .long("deleted")
+                        .action(clap::ArgAction::SetTrue)
                         .help("check for deleted files"),
                 ),
         )
         .subcommand(
-            clap::SubCommand::with_name("sync")
+            clap::Command::new("sync")
                 .about("Perform a synchronisation")
                 .arg(
-                    clap::Arg::with_name("target")
+                    clap::Arg::new("target")
                         .help("The remote target to synchronize with")
                         .required(true),
                 )
                 .arg(
-                    clap::Arg::with_name("push")
+                    clap::Arg::new("push")
                         .long("push")
-                        .short("p")
+                        .short('p')
+                        .action(clap::ArgAction::SetTrue)
                         .help("Push to the remote store rather than pulling"),
                 )
                 .arg(
-                    clap::Arg::with_name("dry-run")
+                    clap::Arg::new("dry-run")
                         .long("dry-run")
-                        .short("n")
+                        .short('n')
+                        .action(clap::ArgAction::SetTrue)
                         .help("Dry run, print actions but do not perform them"),
                 )
                 .arg(
-                    clap::Arg::with_name("delete")
+                    clap::Arg::new("delete")
                         .long("delete")
+                        .action(clap::ArgAction::SetTrue)
                         .help("delete files removed from remote target"),
                 ),
         )
@@ -105,20 +110,20 @@ fn parse_args() -> clap::ArgMatches<'static> {
     args
 }
 
-async fn dispatch_command(args: clap::ArgMatches<'_>) -> KResult<()> {
+async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
     match args.subcommand() {
-        ("update", Some(subargs)) => {
+        Some(("update", subargs)) => {
             let opts = UpdateOpts {
-                deleted: subargs.is_present("deleted"),
+                deleted: subargs.get_flag("deleted"),
             };
             do_update(opts)
         }
-        ("sync", Some(subargs)) => {
+        Some(("sync", subargs)) => {
             let opts = SyncOpts {
-                target: subargs.value_of("target").unwrap().to_owned(),
-                push: subargs.is_present("push"),
-                dry_run: subargs.is_present("dry-run"),
-                delete: subargs.is_present("delete"),
+                target: subargs.get_one::<String>("target").unwrap().clone(),
+                push: subargs.get_flag("push"),
+                dry_run: subargs.get_flag("dry-run"),
+                delete: subargs.get_flag("delete"),
             };
             do_sync(opts).await
         }
@@ -171,13 +176,22 @@ async fn do_sync(opts: SyncOpts) -> KResult<()> {
     info!("get remote store locally");
     let mut got_remote_store = true;
     remote.get(ksync, ksyncremote).await.or_else(|err| {
-        if err.kind() == io::ErrorKind::NotFound && opts.push {
-            got_remote_store = false;
-            Ok(())
-        } else {
-            Err(err)
+        match err {
+            remote::Error::NotFound(_) if opts.push => {
+                got_remote_store = false;
+                Ok(())
+            },
+            err => Err(err),
         }
     })?;
+
+    // {
+    //     Ok(()) => {},
+    //      if opts.push {
+    //         got_remote_store = false;
+    //     },
+    //     Err(err) => return Err(err)
+    // }
 
     // read both stores
     info!("reading local store");
