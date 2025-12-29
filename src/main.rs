@@ -2,6 +2,7 @@
 
 use clout::{self, error, info, status, success};
 
+mod config;
 mod progress;
 mod remote;
 mod s3;
@@ -16,8 +17,10 @@ use std::path::Path;
 use std::process::ExitCode;
 use tokio;
 
-const KSYNC: &'static str = ".kitchensync";
-const KSYNCREMOTE: &'static str = ".kitchensync-remote";
+const KSYNC: &str = ".kitchensync";
+const KSYNCREMOTE: &str = ".kitchensync-remote";
+const KCONFIG: &str = ".kitchensync.toml";
+const DEFAULT_TARGET: &str = "default";
 
 type KResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -81,8 +84,7 @@ fn parse_args() -> clap::ArgMatches {
                 .about("Perform a synchronisation")
                 .arg(
                     clap::Arg::new("target")
-                        .help("The remote target to synchronize with")
-                        .required(true),
+                        .help("The remote target to synchronize with"),
                 )
                 .arg(
                     clap::Arg::new("push")
@@ -111,6 +113,8 @@ fn parse_args() -> clap::ArgMatches {
 }
 
 async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
+    let config = config::load()?;
+
     match args.subcommand() {
         Some(("update", subargs)) => {
             let opts = UpdateOpts {
@@ -119,8 +123,18 @@ async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
             do_update(opts)
         }
         Some(("sync", subargs)) => {
+            let cli_target = subargs.get_one::<String>("target").cloned();
+
+            let target = cli_target.or_else(|| {
+                config.destination.iter().find(|item|    
+                    item.name == DEFAULT_TARGET
+                ).map(|item| item.target.clone())
+            });
+
+            let target = target.ok_or("target must be specified on the command line, or provided in the config file")?;
+
             let opts = SyncOpts {
-                target: subargs.get_one::<String>("target").unwrap().clone(),
+                target,
                 push: subargs.get_flag("push"),
                 dry_run: subargs.get_flag("dry-run"),
                 delete: subargs.get_flag("delete"),
