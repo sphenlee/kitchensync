@@ -82,10 +82,7 @@ fn parse_args() -> clap::ArgMatches {
         .subcommand(
             clap::Command::new("sync")
                 .about("Perform a synchronisation")
-                .arg(
-                    clap::Arg::new("target")
-                        .help("The remote target to synchronize with"),
-                )
+                .arg(clap::Arg::new("target").help("The remote target to synchronize with"))
                 .arg(
                     clap::Arg::new("push")
                         .long("push")
@@ -126,12 +123,16 @@ async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
             let cli_target = subargs.get_one::<String>("target").cloned();
 
             let target = cli_target.or_else(|| {
-                config.destination.iter().find(|item|    
-                    item.name == DEFAULT_TARGET
-                ).map(|item| item.target.clone())
+                config
+                    .destination
+                    .iter()
+                    .find(|item| item.name == DEFAULT_TARGET)
+                    .map(|item| item.target.clone())
             });
 
-            let target = target.ok_or("target must be specified on the command line, or provided in the config file")?;
+            let target = target.ok_or(
+                "target must be specified on the command line, or provided in the config file",
+            )?;
 
             let opts = SyncOpts {
                 target,
@@ -189,15 +190,16 @@ async fn do_sync(opts: SyncOpts) -> KResult<()> {
 
     info!("get remote store locally");
     let mut got_remote_store = true;
-    remote.get(ksync, ksyncremote).await.or_else(|err| {
-        match err {
+    remote
+        .get(ksync, ksyncremote)
+        .await
+        .or_else(|err| match err {
             remote::Error::NotFound(_) if opts.push => {
                 got_remote_store = false;
                 Ok(())
-            },
+            }
             err => Err(err),
-        }
-    })?;
+        })?;
 
     // {
     //     Ok(()) => {},

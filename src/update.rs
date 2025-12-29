@@ -49,7 +49,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
 fn get_sha1(name: &Path) -> KResult<String> {
     let mut h = Sha1::new();
     let mut fp = File::open(name)?;
-    let mut buf = vec![0; 4096*16];
+    let mut buf = vec![0; 4096 * 16];
 
     loop {
         let read = fp.read(&mut buf)?;

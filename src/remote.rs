@@ -1,12 +1,12 @@
 use clout::debug;
-use tokio::fs::{File, self};
-use tokio::io;
 use std::path::{Path, PathBuf};
+use tokio::fs::{self, File};
+use tokio::io;
 
-use url::{ParseError, Url};
-use utime;
 use async_trait::async_trait;
 use thiserror::Error;
+use url::{ParseError, Url};
+use utime;
 
 use super::KResult;
 use crate::s3::S3Remote;

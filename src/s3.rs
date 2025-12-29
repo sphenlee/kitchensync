@@ -1,16 +1,19 @@
-use clout::{debug};
-use rusoto_s3::{DeleteObjectRequest, GetObjectRequest, PutObjectRequest, S3Client, StreamingBody, S3, GetObjectError};
+use async_trait::async_trait;
+use clout::debug;
+use rusoto_s3::{
+    DeleteObjectRequest, GetObjectError, GetObjectRequest, PutObjectRequest, S3Client,
+    StreamingBody, S3,
+};
+use std::path::{Path, PathBuf};
 use tokio::fs::{self, File};
 use tokio::io;
-use tokio_util::codec::{Framed, BytesCodec};
-use std::path::{Path, PathBuf};
+use tokio_util::codec::{BytesCodec, Framed};
 use url::Url;
-use async_trait::async_trait;
 
 use super::KResult;
 use crate::remote::{self, Remote};
-use rusoto_core::{Region, RusotoError};
 use futures::TryStreamExt;
+use rusoto_core::{Region, RusotoError};
 
 impl<T: std::error::Error + 'static> From<RusotoError<T>> for remote::Error {
     fn from(err: RusotoError<T>) -> Self {
@@ -54,14 +57,12 @@ impl Remote for S3Remote {
         }
 
         let client = self.client.clone();
-        let resp = client.get_object(req).await.map_err(|err| {
-            match err {
-                RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
-                    debug!("s3 no such key {:?}", key);
-                    remote::Error::NotFound(PathBuf::from(key))
-                },
-                err => err.into()
+        let resp = client.get_object(req).await.map_err(|err| match err {
+            RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
+                debug!("s3 no such key {:?}", key);
+                remote::Error::NotFound(PathBuf::from(key))
             }
+            err => err.into(),
         })?;
         let mut body = resp.body.expect("no S3 body returned").into_async_read();
         let mut sink = File::create(dest).await?;
@@ -78,9 +79,7 @@ impl Remote for S3Remote {
         let file = File::open(src).await?;
         req.content_length = Some(file.metadata().await?.len() as i64);
 
-        let stream = Framed::new(file, BytesCodec::new()).map_ok(|bytes| {
-            bytes.freeze()
-        });
+        let stream = Framed::new(file, BytesCodec::new()).map_ok(|bytes| bytes.freeze());
 
         req.body = Some(StreamingBody::new(stream));
 
