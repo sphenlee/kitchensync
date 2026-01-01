@@ -1,39 +1,48 @@
+use anyhow::format_err;
 use async_trait::async_trait;
+use aws_sdk_s3_transfer_manager as s3tm;
 use clout::debug;
-use rusoto_s3::{
-    DeleteObjectRequest, GetObjectError, GetObjectRequest, PutObjectRequest, S3Client,
-    StreamingBody, S3,
-};
+use rusoto_core::request::BufferedHttpResponse;
+use rusoto_s3::{DeleteObjectRequest, HeadObjectError, HeadObjectRequest, S3, S3Client};
 use std::path::{Path, PathBuf};
 use tokio::fs::{self, File};
-use tokio::io;
-use tokio_util::codec::{BytesCodec, Framed};
+use tokio::io::AsyncWriteExt;
 use url::Url;
 
 use super::KResult;
 use crate::remote::{self, Remote};
-use futures::TryStreamExt;
 use rusoto_core::{Region, RusotoError};
 
-impl<T: std::error::Error + 'static> From<RusotoError<T>> for remote::Error {
-    fn from(err: RusotoError<T>) -> Self {
-        remote::Error::Other(err.to_string())
-    }
-}
+// impl<T: std::error::Error + 'static> From<RusotoError<T>> for remote::Error {
+//     fn from(err: RusotoError<T>) -> Self {
+//         remote::Error::Other(err.to_string())
+//     }
+// }
+
+// impl<T: std::error::Error + 'static> From<s3tm::error::Error> for remote::Error {
+//     fn from(err: s3tm::error::Error) -> Self {
+//         remote::Error::Other(err.to_string())
+//     }
+// }
 
 pub struct S3Remote {
-    client: S3Client,
+    client: aws_sdk_s3_transfer_manager::Client,
+    raw_client: S3Client,
     bucket: String,
     prefix: PathBuf,
 }
 
 impl S3Remote {
-    pub fn new(url: &Url) -> KResult<Box<dyn Remote>> {
-        let bucket = url.host_str().ok_or("S3 URL missing bucket")?;
+    pub async fn new(url: &Url) -> KResult<Box<dyn Remote>> {
+        let bucket = url.host_str().ok_or(format_err!("S3 URL missing bucket"))?;
         let prefix = Path::new(url.path()).strip_prefix("/").unwrap().to_owned();
 
+        let config = s3tm::from_env().load().await;
+        let client = s3tm::Client::new(config);
+
         Ok(Box::new(S3Remote {
-            client: S3Client::new(Region::default()),
+            client,
+            raw_client: S3Client::new(Region::default()),
             bucket: bucket.to_owned(),
             prefix,
         }))
@@ -42,63 +51,108 @@ impl S3Remote {
 
 #[async_trait]
 impl Remote for S3Remote {
-    async fn get(&mut self, name: &Path, dest: &Path) -> remote::Result<()> {
-        // TODO don't allocate so much stuff here
+    async fn exists(&mut self, name: &Path) -> remote::Result<bool> {
+        let key = self
+            .prefix
+            .join(name)
+            .to_str()
+            .ok_or_else(|| format_err!("non utf-8 characters in filename: {:?}", name))?
+            .to_owned();
 
-        let mut req = GetObjectRequest::default();
+        let mut req = HeadObjectRequest::default();
         req.bucket = self.bucket.clone();
-        let key: String = self.prefix.join(name).to_string_lossy().into();
-        req.key = key.clone(); // need to clone so we can report an error
+        req.key = key.clone();
 
-        debug!("get s3://{}/{} -> {:?}", req.bucket, req.key, dest);
+        debug!("exists s3://{}/{}", self.bucket, req.key);
+
+        let raw_client = self.raw_client.clone();
+        let resp = raw_client
+            .head_object(req)
+            .await
+            .map(|_| true)
+            .or_else(move |err| match err {
+                RusotoError::Service(HeadObjectError::NoSuchKey(_)) |
+                RusotoError::Unknown(BufferedHttpResponse{ status: http::status::StatusCode::NOT_FOUND, ..}) => {
+                    debug!("s3 no such key {:?}", key);
+                    Ok(false)
+                }
+                err => Err(err),
+            })?;
+
+        Ok(resp)
+    }
+
+    async fn get(&mut self, name: &Path, dest: &Path) -> remote::Result<()> {
+        let key = self
+            .prefix
+            .join(name)
+            .to_str()
+            .ok_or_else(|| format_err!("non utf-8 characters in filename: {:?}", name))?
+            .to_owned();
+
+        debug!("get s3://{}/{} -> {:?}", self.bucket, key, dest);
+
+        let mut handle = self
+            .client
+            .download()
+            .bucket(&self.bucket)
+            .key(key)
+            .initiate()?;
 
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).await?;
         }
-
-        let client = self.client.clone();
-        let resp = client.get_object(req).await.map_err(|err| match err {
-            RusotoError::Service(GetObjectError::NoSuchKey(_)) => {
-                debug!("s3 no such key {:?}", key);
-                remote::Error::NotFound(PathBuf::from(key))
-            }
-            err => err.into(),
-        })?;
-        let mut body = resp.body.expect("no S3 body returned").into_async_read();
         let mut sink = File::create(dest).await?;
-        io::copy(&mut body, &mut sink).await?;
+
+        let body = handle.body_mut();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk?;
+            for segment in chunk.data.into_segments() {
+                sink.write_all(segment.as_ref()).await?;
+            }
+        }
+
         Ok(())
     }
 
     async fn put(&mut self, name: &Path, src: &Path) -> remote::Result<()> {
-        // TODO don't allocate so much stuff here
-        let mut req = PutObjectRequest::default();
-        req.bucket = self.bucket.clone();
-        req.key = self.prefix.join(name).to_string_lossy().into();
+        let key = self
+            .prefix
+            .join(name)
+            .to_str()
+            .ok_or_else(|| format_err!("non utf-8 characters in filename: {:?}", name))?
+            .to_owned();
 
-        let file = File::open(src).await?;
-        req.content_length = Some(file.metadata().await?.len() as i64);
+        debug!("put {:?} -> s3://{}/{}", src, self.bucket, key);
 
-        let stream = Framed::new(file, BytesCodec::new()).map_ok(|bytes| bytes.freeze());
+        let stream = s3tm::io::InputStream::from_path(src)?;
+        let _response = self
+            .client
+            .upload()
+            .bucket(&self.bucket)
+            .key(key)
+            .body(stream)
+            .initiate()?
+            .join()
+            .await?;
 
-        req.body = Some(StreamingBody::new(stream));
-
-        debug!("put {:?} -> s3://{}/{}", src, req.bucket, req.key);
-
-        let client = self.client.clone();
-        client.put_object(req).await?;
         Ok(())
     }
 
     async fn remove(&mut self, name: &Path) -> remote::Result<()> {
         let mut req = DeleteObjectRequest::default();
         req.bucket = self.bucket.clone();
-        req.key = self.prefix.join(name).to_string_lossy().into();
+        req.key = self
+            .prefix
+            .join(name)
+            .to_str()
+            .ok_or_else(|| format_err!("non utf-8 characters in filename: {:?}", name))?
+            .to_owned();
 
         debug!("remove s3://{}/{}", req.bucket, req.key);
 
-        let client = self.client.clone();
-        client.delete_object(req).await?;
+        let raw_client = self.raw_client.clone();
+        raw_client.delete_object(req).await?;
         Ok(())
     }
 

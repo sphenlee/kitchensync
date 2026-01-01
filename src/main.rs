@@ -1,5 +1,6 @@
 //#[macro_use] extern crate log;
 
+use anyhow::format_err;
 use clout::{self, error, info, status, success};
 
 mod config;
@@ -22,17 +23,18 @@ const KSYNCREMOTE: &str = ".kitchensync-remote";
 const KCONFIG: &str = ".kitchensync.toml";
 const DEFAULT_TARGET: &str = "default";
 
-type KResult<T> = Result<T, Box<dyn std::error::Error>>;
+type KResult<T> = anyhow::Result<T>;
 
 #[tokio::main]
 async fn main() -> ExitCode {
     let args = parse_args();
 
-    let env = env_logger::Env::new()
-        .filter("KSYNC_LOG")
-        .write_style("KSYNC_LOG_STYLE");
-    let mut builder = env_logger::Builder::from_env(env);
-    builder.init();
+    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_env("KSYNC_LOG"))
+        .init();
 
     clout::init()
         .with_verbose(args.get_count("verbose") as u8)
@@ -131,7 +133,7 @@ async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
             });
 
             let target = target.ok_or(
-                "target must be specified on the command line, or provided in the config file",
+                format_err!("target must be specified on the command line, or provided in the config file"),
             )?;
 
             let opts = SyncOpts {
@@ -177,7 +179,7 @@ struct SyncOpts {
 
 async fn do_sync(opts: SyncOpts) -> KResult<()> {
     // get the remote ksync file locally
-    let mut remote = remote::from_location(&opts.target)?;
+    let mut remote = remote::from_location(&opts.target).await?;
 
     status!(
         "syncing {} {}",
@@ -189,25 +191,15 @@ async fn do_sync(opts: SyncOpts) -> KResult<()> {
     let ksyncremote = Path::new(KSYNCREMOTE);
 
     info!("get remote store locally");
-    let mut got_remote_store = true;
-    remote
-        .get(ksync, ksyncremote)
-        .await
-        .or_else(|err| match err {
-            remote::Error::NotFound(_) if opts.push => {
-                got_remote_store = false;
-                Ok(())
-            }
-            err => Err(err),
-        })?;
+    let got_remote_store = remote.exists(ksync).await?;
 
-    // {
-    //     Ok(()) => {},
-    //      if opts.push {
-    //         got_remote_store = false;
-    //     },
-    //     Err(err) => return Err(err)
-    // }
+    if got_remote_store {
+        remote
+        .get(ksync, ksyncremote)
+        .await?;
+    } else if !opts.push {
+        return Err(format_err!("remote store not found, cannot perform a pull sync"));
+    }
 
     // read both stores
     info!("reading local store");

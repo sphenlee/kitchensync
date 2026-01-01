@@ -5,14 +5,14 @@ authors = ["Stephen Lee <sphen.lee@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-#atty = "0.2.2"
+anyhow = "1"
 async-trait = "0.1"
 aws-sdk-s3-transfer-manager = "0.1.1"
 clap = "4.5"
 clout = "0.2"
 colored = "3"
-env_logger = "0.11"
 futures = "0.3"
+http = "0.2"
 indicatif = "0.17"
 log = "0.4"
 rusoto_core = "0.48"
@@ -20,7 +20,8 @@ rusoto_s3 = "0.48"
 serde = "1.0"
 sha1 = "0.10"
 thiserror = "2"
-tokio = { version = "1", features = ["fs"] }
+tokio = { version = "1", features = ["fs", "tracing"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"]}
 tokio-util = "0.7"
 toml = "0.9"
 url = "2"
