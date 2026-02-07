@@ -59,9 +59,7 @@ pub async fn from_location(location: &str) -> KResult<Box<dyn Remote>> {
         Ok(url) => match url.scheme() {
             "file" => FileRemote::new_boxed(url.path()),
             "s3" => S3Remote::new_boxed(&url).await,
-            scheme => Err(
-                
-                format_err!("unsupported URL scheme {}", scheme)),
+            scheme => Err(format_err!("unsupported URL scheme {}", scheme)),
         },
     }
 }
