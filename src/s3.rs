@@ -1,9 +1,8 @@
 use anyhow::format_err;
 use async_trait::async_trait;
+use aws_sdk_s3::operation::head_object::HeadObjectError;
 use aws_sdk_s3_transfer_manager as s3tm;
 use clout::debug;
-use rusoto_core::request::BufferedHttpResponse;
-use rusoto_s3::{DeleteObjectRequest, HeadObjectError, HeadObjectRequest, S3, S3Client};
 use std::path::{Path, PathBuf};
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
@@ -11,7 +10,6 @@ use url::Url;
 
 use super::KResult;
 use crate::remote::{self, Remote};
-use rusoto_core::{Region, RusotoError};
 
 // impl<T: std::error::Error + 'static> From<RusotoError<T>> for remote::Error {
 //     fn from(err: RusotoError<T>) -> Self {
@@ -26,8 +24,8 @@ use rusoto_core::{Region, RusotoError};
 // }
 
 pub struct S3Remote {
-    client: aws_sdk_s3_transfer_manager::Client,
-    raw_client: S3Client,
+    transfer_manager: aws_sdk_s3_transfer_manager::Client,
+    s3_client: aws_sdk_s3::Client,
     bucket: String,
     prefix: PathBuf,
 }
@@ -37,12 +35,14 @@ impl S3Remote {
         let bucket = url.host_str().ok_or(format_err!("S3 URL missing bucket"))?;
         let prefix = Path::new(url.path()).strip_prefix("/").unwrap().to_owned();
 
-        let config = s3tm::from_env().load().await;
-        let client = s3tm::Client::new(config);
+        let config = aws_config::load_from_env().await;
+
+        let tm_config = s3tm::from_env().load().await;
+        let transfer_manager = s3tm::Client::new(tm_config);
 
         Ok(Box::new(S3Remote {
-            client,
-            raw_client: S3Client::new(Region::default()),
+            transfer_manager,
+            s3_client: aws_sdk_s3::Client::new(&config),
             bucket: bucket.to_owned(),
             prefix,
         }))
@@ -59,25 +59,18 @@ impl Remote for S3Remote {
             .ok_or_else(|| format_err!("non utf-8 characters in filename: {:?}", name))?
             .to_owned();
 
-        let mut req = HeadObjectRequest::default();
-        req.bucket = self.bucket.clone();
-        req.key = key.clone();
+        let req = self.s3_client.head_object().bucket(&self.bucket).key(&key);
 
-        debug!("exists s3://{}/{}", self.bucket, req.key);
+        debug!("exists s3://{}/{}", self.bucket, key);
 
-        let raw_client = self.raw_client.clone();
-        let resp = raw_client
-            .head_object(req)
-            .await
-            .map(|_| true)
-            .or_else(move |err| match err {
-                RusotoError::Service(HeadObjectError::NoSuchKey(_)) |
-                RusotoError::Unknown(BufferedHttpResponse{ status: http::status::StatusCode::NOT_FOUND, ..}) => {
-                    debug!("s3 no such key {:?}", key);
-                    Ok(false)
-                }
-                err => Err(err),
-            })?;
+        let resp =
+            req.send()
+                .await
+                .map(|_| true)
+                .or_else(move |err| match err.into_service_error() {
+                    HeadObjectError::NotFound(_) => Ok(false),
+                    err => Err(err),
+                })?;
 
         Ok(resp)
     }
@@ -93,7 +86,7 @@ impl Remote for S3Remote {
         debug!("get s3://{}/{} -> {:?}", self.bucket, key, dest);
 
         let mut handle = self
-            .client
+            .transfer_manager
             .download()
             .bucket(&self.bucket)
             .key(key)
@@ -127,7 +120,7 @@ impl Remote for S3Remote {
 
         let stream = s3tm::io::InputStream::from_path(src)?;
         let _response = self
-            .client
+            .transfer_manager
             .upload()
             .bucket(&self.bucket)
             .key(key)
@@ -140,19 +133,22 @@ impl Remote for S3Remote {
     }
 
     async fn remove(&mut self, name: &Path) -> remote::Result<()> {
-        let mut req = DeleteObjectRequest::default();
-        req.bucket = self.bucket.clone();
-        req.key = self
+        let key = self
             .prefix
             .join(name)
             .to_str()
             .ok_or_else(|| format_err!("non utf-8 characters in filename: {:?}", name))?
             .to_owned();
 
-        debug!("remove s3://{}/{}", req.bucket, req.key);
+        debug!("remove s3://{}/{}", self.bucket, key);
 
-        let raw_client = self.raw_client.clone();
-        raw_client.delete_object(req).await?;
+        let req = self
+            .s3_client
+            .delete_object()
+            .bucket(&self.bucket)
+            .key(&key);
+
+        req.send().await?;
         Ok(())
     }
 
