@@ -16,7 +16,6 @@ use store::Store;
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
-use tokio;
 
 const KSYNC: &str = ".kitchensync";
 const KSYNCREMOTE: &str = ".kitchensync-remote";
@@ -29,7 +28,7 @@ type KResult<T> = anyhow::Result<T>;
 async fn main() -> ExitCode {
     let args = parse_args();
 
-    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
     tracing_subscriber::registry()
         .with(fmt::layer())
@@ -52,7 +51,7 @@ async fn main() -> ExitCode {
 }
 
 fn parse_args() -> clap::ArgMatches {
-    let args = clap::Command::new("kitchensync")
+    clap::Command::new("kitchensync")
         .version("0.1")
         .author("Stephen Lee <sphen.lee@gmail.com>")
         .about("Serverless file synchronisation tool")
@@ -106,9 +105,7 @@ fn parse_args() -> clap::ArgMatches {
                         .help("delete files removed from remote target"),
                 ),
         )
-        .get_matches();
-
-    args
+        .get_matches()
 }
 
 async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
@@ -132,9 +129,9 @@ async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
                     .map(|item| item.target.clone())
             });
 
-            let target = target.ok_or(
-                format_err!("target must be specified on the command line, or provided in the config file"),
-            )?;
+            let target = target.ok_or(format_err!(
+                "target must be specified on the command line, or provided in the config file"
+            ))?;
 
             let opts = SyncOpts {
                 target,
@@ -194,11 +191,11 @@ async fn do_sync(opts: SyncOpts) -> KResult<()> {
     let got_remote_store = remote.exists(ksync).await?;
 
     if got_remote_store {
-        remote
-        .get(ksync, ksyncremote)
-        .await?;
+        remote.get(ksync, ksyncremote).await?;
     } else if !opts.push {
-        return Err(format_err!("remote store not found, cannot perform a pull sync"));
+        return Err(format_err!(
+            "remote store not found, cannot perform a pull sync"
+        ));
     }
 
     // read both stores

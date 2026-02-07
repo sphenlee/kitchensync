@@ -42,7 +42,7 @@ impl Store {
 
         let files = reader
             .lines()
-            .flat_map(|line| line.ok())
+            .map_while(Result::ok)
             .map(read_one_line)
             .collect();
 
@@ -64,7 +64,7 @@ impl Store {
     }
 
     pub fn write<W: Write>(&self, mut out: W) -> KResult<()> {
-        for (ref name, ref item) in self.files().iter() {
+        for (name, item) in self.files().iter() {
             //if item.seen {
             let line = format!(
                 "{} {} {}\n",

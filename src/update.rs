@@ -120,7 +120,7 @@ pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -
         }
     } else {
         info!("re-add deleted files to the store");
-        updated_store.files_mut().extend(store.into_iter());
+        updated_store.files_mut().extend(store);
     }
 
     Ok(updated_store)

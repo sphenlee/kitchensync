@@ -7,8 +7,6 @@ use clout::{status, trace};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use utime;
-
 #[derive(Debug, Copy, Clone)]
 pub enum Action {
     Add,
@@ -48,7 +46,7 @@ pub fn get_actions(mut dest: Store, src: Store) -> (Actions, Actions) {
             trace!("checking {:?}", name);
             match dest.files_mut().remove(name) {
                 None => Some(Action::Add),
-                Some(ditem) => compare_items(&sitem, &ditem),
+                Some(ditem) => compare_items(sitem, &ditem),
             }
             .map(|action| (name.clone(), sitem.timestamp, action))
         })
@@ -77,7 +75,7 @@ pub async fn perform_pull_actions(actions: Actions, remote: &mut dyn Remote) -> 
 
     for (name, ts, action) in actions {
         reporter.inc();
-        reporter.report(&format_message(action, &name));
+        reporter.report(format_message(action, &name));
 
         match action {
             Action::Add | Action::Update => {
@@ -103,7 +101,7 @@ pub async fn perform_push_actions(actions: Actions, remote: &mut dyn Remote) -> 
 
     for (name, ts, action) in actions {
         reporter.inc();
-        reporter.report(&format_message(action, &name));
+        reporter.report(format_message(action, &name));
 
         match action {
             Action::Add | Action::Update => {

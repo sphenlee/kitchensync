@@ -31,7 +31,7 @@ pub struct S3Remote {
 }
 
 impl S3Remote {
-    pub async fn new(url: &Url) -> KResult<Box<dyn Remote>> {
+    pub async fn new_boxed(url: &Url) -> KResult<Box<dyn Remote>> {
         let bucket = url.host_str().ok_or(format_err!("S3 URL missing bucket"))?;
         let prefix = Path::new(url.path()).strip_prefix("/").unwrap().to_owned();
 

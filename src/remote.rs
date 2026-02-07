@@ -6,7 +6,6 @@ use tokio::io;
 
 use async_trait::async_trait;
 use url::{ParseError, Url};
-use utime;
 
 use super::KResult;
 use crate::s3::S3Remote;
@@ -54,12 +53,12 @@ pub async fn from_location(location: &str) -> KResult<Box<dyn Remote>> {
     match Url::parse(location) {
         Err(ParseError::RelativeUrlWithoutBase) => {
             // URL without a base is just a relative file path
-            FileRemote::new(location.into())
+            FileRemote::new_boxed(location)
         }
         Err(e) => Err(e.into()),
         Ok(url) => match url.scheme() {
-            "file" => FileRemote::new(url.path()),
-            "s3" => S3Remote::new(&url).await,
+            "file" => FileRemote::new_boxed(url.path()),
+            "s3" => S3Remote::new_boxed(&url).await,
             scheme => Err(
                 
                 format_err!("unsupported URL scheme {}", scheme)),
@@ -75,7 +74,7 @@ struct FileRemote {
 }
 
 impl FileRemote {
-    fn new(root: &str) -> KResult<Box<dyn Remote>> {
+    fn new_boxed(root: &str) -> KResult<Box<dyn Remote>> {
         Ok(Box::new(FileRemote { root: root.into() }))
     }
 }
