@@ -1,11 +1,13 @@
 use super::KResult;
-use crate::progress::Reporter;
 use crate::remote::Remote;
 use crate::store::{Store, StoreItem};
 
-use clout::{status, trace};
+use clout::{status, trace, error};
+use anyhow::format_err;
+use futures::stream::{self, StreamExt};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Action {
@@ -66,55 +68,92 @@ pub fn show_actions(actions: Actions) {
     }
 }
 
-fn format_message(action: Action, name: &Path) -> String {
-    format!("{} {}", action.get_code(), name.to_string_lossy())
+fn status_message(action: Action, name: &Path) {
+    status!("{} {}", action.get_code(), name.to_string_lossy());
 }
 
-pub async fn perform_pull_actions(actions: Actions, remote: &mut dyn Remote) -> KResult<()> {
-    let reporter = Reporter::new(actions.len());
+async fn pull_get(remote: &dyn Remote, name: &Path, ts: i64) -> KResult<()> {
+    remote.get(&name, &name).await?;
 
-    for (name, ts, action) in actions {
-        reporter.inc();
-        reporter.report(format_message(action, &name));
+    #[allow(deprecated)]
+    utime::set_file_times(&name, ts, ts)?;
 
-        match action {
-            Action::Add | Action::Update => {
-                remote.get(&name, &name).await?;
-                #[allow(deprecated)]
-                utime::set_file_times(&name, ts, ts)?;
+    Ok(())
+}
+
+pub async fn perform_pull_actions(actions: Actions, remote: &dyn Remote) -> KResult<()> {
+    let failed = Arc::new(AtomicBool::new(false));
+
+    stream::iter(actions)
+        .for_each_concurrent(10, |(name, ts, action)| {
+            let failed = failed.clone();
+            async move {
+
+                status_message(action, &name);
+                
+                let result = match action {
+                    Action::Add | Action::Update => {
+                        pull_get(remote, &name, ts).await
+                    }
+                    Action::Remove => {
+                        fs::remove_file(&name).map_err(Into::into)
+                    }
+                    Action::Touch => {
+                        #[allow(deprecated)]
+                        utime::set_file_times(&name, ts, ts).map_err(Into::into)
+                    }
+                };
+
+                if let Err(e) = result {
+                    error!("E {}: {}", name.to_string_lossy(), e);
+                    failed.store(true, Ordering::SeqCst);
+                    return;
+                }
             }
-            Action::Remove => {
-                fs::remove_file(name)?;
-            }
-            Action::Touch => {
-                #[allow(deprecated)]
-                utime::set_file_times(&name, ts, ts)?;
-            }
-        };
+        })
+        .await;
+
+    if failed.load(Ordering::SeqCst) {
+        return Err(format_err!("download unsuccessful"));
     }
 
     Ok(())
 }
 
-pub async fn perform_push_actions(actions: Actions, remote: &mut dyn Remote) -> KResult<()> {
-    let reporter = Reporter::new(actions.len());
+pub async fn perform_push_actions(actions: Actions, remote: &dyn Remote) -> KResult<()> {
 
-    for (name, ts, action) in actions {
-        reporter.inc();
-        reporter.report(format_message(action, &name));
+    let failed = Arc::new(AtomicBool::new(false));
 
-        match action {
-            Action::Add | Action::Update => {
-                remote.put(&name, &name).await?;
-                remote.touch(&name, ts).await?;
+    stream::iter(actions)
+        .for_each_concurrent(10, |(name, ts, action)| {
+            let failed = failed.clone();
+            async move {
+
+                status_message(action, &name);
+                
+                let result = match action {
+                    Action::Add | Action::Update => {
+                        remote.put(&name, &name, ts).await
+                    }
+                    Action::Remove => {
+                        remote.remove(&name).await
+                    }
+                    Action::Touch => {
+                        remote.touch(&name, ts).await
+                    }
+                };
+
+                if let Err(e) = result {
+                    error!("E {}: {}", name.to_string_lossy(), e);
+                    failed.store(true, Ordering::SeqCst);
+                    return;
+                }
             }
-            Action::Remove => {
-                remote.remove(&name).await?;
-            }
-            Action::Touch => {
-                remote.touch(&name, ts).await?;
-            }
-        };
+        })
+        .await;
+
+    if failed.load(Ordering::SeqCst) {
+        return Err(format_err!("upload unsuccessful"));
     }
 
     Ok(())

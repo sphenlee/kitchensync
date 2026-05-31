@@ -51,7 +51,7 @@ impl S3Remote {
 
 #[async_trait]
 impl Remote for S3Remote {
-    async fn exists(&mut self, name: &Path) -> remote::Result<bool> {
+    async fn exists(&self, name: &Path) -> remote::Result<bool> {
         let key = self
             .prefix
             .join(name)
@@ -75,7 +75,7 @@ impl Remote for S3Remote {
         Ok(resp)
     }
 
-    async fn get(&mut self, name: &Path, dest: &Path) -> remote::Result<()> {
+    async fn get(&self, name: &Path, dest: &Path) -> remote::Result<()> {
         let key = self
             .prefix
             .join(name)
@@ -108,7 +108,7 @@ impl Remote for S3Remote {
         Ok(())
     }
 
-    async fn put(&mut self, name: &Path, src: &Path) -> remote::Result<()> {
+    async fn put(&self, name: &Path, src: &Path, _ts: i64) -> remote::Result<()> {
         let key = self
             .prefix
             .join(name)
@@ -132,7 +132,7 @@ impl Remote for S3Remote {
         Ok(())
     }
 
-    async fn remove(&mut self, name: &Path) -> remote::Result<()> {
+    async fn remove(&self, name: &Path) -> remote::Result<()> {
         let key = self
             .prefix
             .join(name)
@@ -152,7 +152,7 @@ impl Remote for S3Remote {
         Ok(())
     }
 
-    async fn touch(&mut self, _path: &Path, _ts: i64) -> remote::Result<()> {
+    async fn touch(&self, _name: &Path, _ts: i64) -> remote::Result<()> {
         // can't touch files in S3
         Ok(())
     }

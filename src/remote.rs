@@ -38,11 +38,11 @@ pub type Result<T> = anyhow::Result<T>;
 
 #[async_trait]
 pub trait Remote: Sync {
-    async fn exists(&mut self, name: &Path) -> Result<bool>;
-    async fn get(&mut self, name: &Path, dest: &Path) -> Result<()>;
-    async fn put(&mut self, name: &Path, src: &Path) -> Result<()>;
-    async fn remove(&mut self, name: &Path) -> Result<()>;
-    async fn touch(&mut self, name: &Path, ts: i64) -> Result<()>;
+    async fn exists(&self, name: &Path) -> Result<bool>;
+    async fn get(&self, name: &Path, dest: &Path) -> Result<()>;
+    async fn put(&self, name: &Path, src: &Path, ts: i64) -> Result<()>;
+    async fn remove(&self, name: &Path) -> Result<()>;
+    async fn touch(&self, name: &Path, ts: i64) -> Result<()>;
 }
 
 pub async fn from_location(location: &str) -> KResult<Box<dyn Remote>> {
@@ -79,7 +79,7 @@ impl FileRemote {
 
 #[async_trait]
 impl Remote for FileRemote {
-    async fn exists(&mut self, name: &Path) -> Result<bool> {
+    async fn exists(&self, name: &Path) -> Result<bool> {
         let resolved = self.root.join(name);
         debug!("exists {:?}", resolved);
 
@@ -87,7 +87,7 @@ impl Remote for FileRemote {
         Ok(exists)
     }
 
-    async fn get(&mut self, name: &Path, dest: &Path) -> Result<()> {
+    async fn get(&self, name: &Path, dest: &Path) -> Result<()> {
         let resolved = self.root.join(name);
 
         debug!("get {:?} -> {:?}", resolved, dest);
@@ -104,7 +104,7 @@ impl Remote for FileRemote {
         Ok(())
     }
 
-    async fn put(&mut self, name: &Path, src: &Path) -> Result<()> {
+    async fn put(&self, name: &Path, src: &Path, ts: i64) -> Result<()> {
         let resolved = self.root.join(name);
 
         debug!("put {:?} -> {:?}", src, resolved);
@@ -118,10 +118,14 @@ impl Remote for FileRemote {
 
         io::copy(&mut src, &mut sink).await?;
 
+        if ts > 0 {
+            self.touch(name, ts).await?;
+        }
+
         Ok(())
     }
 
-    async fn remove(&mut self, name: &Path) -> Result<()> {
+    async fn remove(&self, name: &Path) -> Result<()> {
         let resolved = self.root.join(name);
 
         debug!("remove {:?}", resolved);
@@ -129,9 +133,13 @@ impl Remote for FileRemote {
         Ok(())
     }
 
-    async fn touch(&mut self, path: &Path, ts: i64) -> Result<()> {
+    async fn touch(&self, name: &Path, ts: i64) -> Result<()> {
+        let resolved = self.root.join(name);
+
+        debug!("touch {:?} @ {}", resolved, ts);
+
         #[allow(deprecated)]
-        utime::set_file_times(path, ts, ts)?;
+        utime::set_file_times(resolved, ts, ts)?;
         Ok(())
     }
 }

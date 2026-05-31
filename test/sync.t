@@ -1,6 +1,6 @@
 Test basic functionality of the sync command
 
-  $ kitchensync() { RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
+  $ kitchensync() { RAYON_NUM_THREADS=1 RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
 
   $ mkdir a
   $ cd a

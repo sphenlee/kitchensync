@@ -1,14 +1,14 @@
-use clout::{debug, info};
+use clout::{debug, info, status};
 use sha1::{Digest, Sha1};
 use std::fs::File;
-use std::io::Read;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::progress::Reporter;
-use crate::store::{Store, StoreItem};
+use crate::store::{Store, StoreItem, StoreTuple};
 use crate::{KResult, UpdateOpts};
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct FileStat {
@@ -47,37 +47,28 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
 }
 
 fn get_sha1(name: &Path) -> KResult<String> {
-    let mut h = Sha1::new();
-    let mut fp = File::open(name)?;
-    let mut buf = vec![0; 4096 * 16];
+    let mut hasher = Sha1::new();
+    let mut reader = File::open(name)?;
+    
+    io::copy(&mut reader, &mut hasher)?;
 
-    loop {
-        let read = fp.read(&mut buf)?;
-        if read == 0 {
-            break;
-        }
-        h.update(&buf[..read]);
-    }
-
-    let result = h.finalize();
+    let result = hasher.finalize();
     Ok(format!("{:x}", result))
 }
 
-fn added_file(reporter: &Reporter, filestat: &FileStat) -> KResult<StoreItem> {
-    reporter.report(format!("A {}", filestat.name.to_string_lossy()));
+fn added_file(filestat: FileStat) -> KResult<StoreTuple> {
+    status!("A {}", filestat.name.to_string_lossy());
 
-    Ok(StoreItem {
-        sha: get_sha1(&filestat.name)?,
+    let sha = get_sha1(&filestat.name)?;
+
+    Ok((filestat.name, StoreItem {
+        sha,
         timestamp: filestat.timestamp,
         seen: true,
-    })
+    }))
 }
 
-fn compare_file(
-    reporter: &Reporter,
-    mut item: StoreItem,
-    filestat: &FileStat,
-) -> KResult<StoreItem> {
+fn compare_file(mut item: StoreItem, filestat: FileStat) -> KResult<StoreTuple> {
     item.seen = true;
 
     if item.timestamp != filestat.timestamp {
@@ -87,36 +78,49 @@ fn compare_file(
         let sha = get_sha1(&filestat.name)?;
         if item.sha != sha {
             debug!("sha changed {:?} {:?}", filestat, item);
-            reporter.report(format!("U {}", filestat.name.to_string_lossy()));
+            status!("U {}", filestat.name.to_string_lossy());
             item.sha = sha;
         } else {
-            reporter.report(format!("T {}", filestat.name.to_string_lossy()));
+            status!("T {}", filestat.name.to_string_lossy());
         }
     }
 
-    Ok(item)
+    Ok((filestat.name, item))
 }
 
 pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -> KResult<Store> {
     let mut updated_store = Store::empty();
-    let reporter = Reporter::new(files.len());
 
+    let mut matched_pairs: Vec<(FileStat, Option<StoreItem>)> = Vec::with_capacity(files.len());
     for file in files {
-        info!("checking {:?}", file.name);
-        reporter.inc();
+        let found = store.files_mut().remove(&file.name);
+        matched_pairs.push((file, found));
+    }
 
-        let updated_item = match store.files_mut().remove(&file.name) {
-            None => added_file(&reporter, &file)?,
-            Some(item) => compare_file(&reporter, item, &file)?,
-        };
+    let processed: Vec<KResult<(PathBuf, StoreItem)>> = matched_pairs
+        .into_par_iter()
+        .map(|(file, maybe_item)| {
+            info!("checking {:?}", file.name);
+            match maybe_item {
+                None => added_file(file),
+                Some(item) => compare_file(item, file),
+            }
+        })
+        .collect();
 
-        updated_store.files_mut().insert(file.name, updated_item);
+    for r in processed {
+        match r {
+            Ok((name, item)) => {
+                updated_store.files_mut().insert(name, item);
+            }
+            Err(e) => return Err(e),
+        }
     }
 
     if opts.deleted {
         info!("reporting deleted files");
         for (name, _item) in store.into_iter() {
-            reporter.report(format!("D {}", name.to_string_lossy()));
+            status!("D {}", name.to_string_lossy());
         }
     } else {
         info!("re-add deleted files to the store");

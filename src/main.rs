@@ -4,7 +4,6 @@ use anyhow::format_err;
 use clout::{self, error, info, status, success};
 
 mod config;
-mod progress;
 mod remote;
 mod s3;
 mod store;
@@ -176,7 +175,7 @@ struct SyncOpts {
 
 async fn do_sync(opts: SyncOpts) -> KResult<()> {
     // get the remote ksync file locally
-    let mut remote = remote::from_location(&opts.target).await?;
+    let remote = remote::from_location(&opts.target).await?;
 
     status!(
         "syncing {} {}",
@@ -228,17 +227,17 @@ async fn do_sync(opts: SyncOpts) -> KResult<()> {
         info!("performing sync");
 
         if opts.push {
-            sync::perform_push_actions(actions, &mut *remote).await?;
+            sync::perform_push_actions(actions, &*remote).await?;
 
             info!("uploading store to remote");
-            remote.put(ksync, ksync).await?;
+            remote.put(ksync, ksync, 0).await?;
 
             if got_remote_store {
                 info!("removing local copy of remote store");
                 fs::remove_file(ksyncremote)?;
             }
         } else {
-            sync::perform_pull_actions(actions, &mut *remote).await?;
+            sync::perform_pull_actions(actions, &*remote).await?;
 
             info!("update local store");
             fs::rename(ksyncremote, ksync)?;
