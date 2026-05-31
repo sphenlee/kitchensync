@@ -1,6 +1,6 @@
 Tests basic functionality of the update command
 
-  $ kitchensync() { $TESTDIR/../target/debug/kitchensync $* ; }
+  $ kitchensync() { RAYON_NUM_THREADS=1 $TESTDIR/../target/debug/kitchensync $* ; }
 
   $ mkdir a
   $ cd a
