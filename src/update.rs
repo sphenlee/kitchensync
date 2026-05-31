@@ -1,7 +1,7 @@
 use clout::{debug, info, status};
 use sha1::{Digest, Sha1};
 use std::fs::File;
-use std::io;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
@@ -49,11 +49,18 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
 fn get_sha1(name: &Path) -> KResult<String> {
     let mut hasher = Sha1::new();
     let mut reader = File::open(name)?;
+    let mut buffer = [0u8; 8192];
 
-    io::copy(&mut reader, &mut hasher)?;
+    loop {
+        let n = reader.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
 
     let result = hasher.finalize();
-    Ok(format!("{:x}", result))
+    Ok(result.iter().map(|byte| format!("{:02x}", byte)).collect())
 }
 
 fn added_file(filestat: FileStat) -> KResult<StoreTuple> {
