@@ -21,7 +21,7 @@ serde = "1.0"
 sha1 = "0.11.0"
 thiserror = "2"
 tokio = { version = "1.52.3", features = ["fs", "tracing"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"]}
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"]}
 toml = "0.9.8"
 url = "2"
 utime = "0.3"
