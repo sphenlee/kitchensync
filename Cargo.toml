@@ -8,7 +8,7 @@ edition = "2018"
 anyhow = "1.0.102"
 async-trait = "0.1"
 aws-sdk-s3-transfer-manager = "0.1.1"
-aws-config = { version= "1.8.12", features = ["behavior-version-latest"] }
+aws-config = { version= "1.8.17", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.8"
 clap = "4.5"
 clout = "0.2"
