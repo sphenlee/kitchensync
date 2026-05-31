@@ -76,10 +76,10 @@ fn status_message(action: Action, name: &Path) {
 }
 
 async fn pull_get(remote: &dyn Remote, name: &Path, ts: i64) -> KResult<()> {
-    remote.get(&name, &name).await?;
+    remote.get(name, name).await?;
 
     #[allow(deprecated)]
-    utime::set_file_times(&name, ts, ts)?;
+    utime::set_file_times(name, ts, ts)?;
 
     Ok(())
 }
@@ -106,7 +106,6 @@ pub async fn perform_pull_actions(actions: Actions, remote: &dyn Remote) -> KRes
                 if let Err(e) = result {
                     error!("E {}: {}", name.to_string_lossy(), e);
                     failed.store(true, Ordering::SeqCst);
-                    return;
                 }
             }
         })
@@ -137,7 +136,6 @@ pub async fn perform_push_actions(actions: Actions, remote: &dyn Remote) -> KRes
                 if let Err(e) = result {
                     error!("E {}: {}", name.to_string_lossy(), e);
                     failed.store(true, Ordering::SeqCst);
-                    return;
                 }
             }
         })
