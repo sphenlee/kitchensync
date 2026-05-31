@@ -2,12 +2,15 @@ use super::KResult;
 use crate::remote::Remote;
 use crate::store::{Store, StoreItem};
 
-use clout::{status, trace, error};
 use anyhow::format_err;
+use clout::{error, status, trace};
 use futures::stream::{self, StreamExt};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Action {
@@ -88,17 +91,13 @@ pub async fn perform_pull_actions(actions: Actions, remote: &dyn Remote) -> KRes
         .for_each_concurrent(10, |(name, ts, action)| {
             let failed = failed.clone();
             async move {
-
                 status_message(action, &name);
-                
+
                 let result = match action {
-                    Action::Add | Action::Update => {
-                        pull_get(remote, &name, ts).await
-                    }
-                    Action::Remove => {
-                        fs::remove_file(&name).map_err(Into::into)
-                    }
-                    Action::Touch => {
+                    Action::Add | Action::Update => pull_get(remote, &name, ts).await,
+                    Action::Remove => fs::remove_file(&name).map_err(Into::into),
+                    Action::Touch =>
+                    {
                         #[allow(deprecated)]
                         utime::set_file_times(&name, ts, ts).map_err(Into::into)
                     }
@@ -121,26 +120,18 @@ pub async fn perform_pull_actions(actions: Actions, remote: &dyn Remote) -> KRes
 }
 
 pub async fn perform_push_actions(actions: Actions, remote: &dyn Remote) -> KResult<()> {
-
     let failed = Arc::new(AtomicBool::new(false));
 
     stream::iter(actions)
         .for_each_concurrent(10, |(name, ts, action)| {
             let failed = failed.clone();
             async move {
-
                 status_message(action, &name);
-                
+
                 let result = match action {
-                    Action::Add | Action::Update => {
-                        remote.put(&name, &name, ts).await
-                    }
-                    Action::Remove => {
-                        remote.remove(&name).await
-                    }
-                    Action::Touch => {
-                        remote.touch(&name, ts).await
-                    }
+                    Action::Add | Action::Update => remote.put(&name, &name, ts).await,
+                    Action::Remove => remote.remove(&name).await,
+                    Action::Touch => remote.touch(&name, ts).await,
                 };
 
                 if let Err(e) = result {

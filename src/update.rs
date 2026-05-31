@@ -49,7 +49,7 @@ pub fn get_files<P: AsRef<Path>>(root: P) -> KResult<Vec<FileStat>> {
 fn get_sha1(name: &Path) -> KResult<String> {
     let mut hasher = Sha1::new();
     let mut reader = File::open(name)?;
-    
+
     io::copy(&mut reader, &mut hasher)?;
 
     let result = hasher.finalize();
@@ -61,11 +61,14 @@ fn added_file(filestat: FileStat) -> KResult<StoreTuple> {
 
     let sha = get_sha1(&filestat.name)?;
 
-    Ok((filestat.name, StoreItem {
-        sha,
-        timestamp: filestat.timestamp,
-        seen: true,
-    }))
+    Ok((
+        filestat.name,
+        StoreItem {
+            sha,
+            timestamp: filestat.timestamp,
+            seen: true,
+        },
+    ))
 }
 
 fn compare_file(mut item: StoreItem, filestat: FileStat) -> KResult<StoreTuple> {
