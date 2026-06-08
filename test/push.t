@@ -1,6 +1,6 @@
 Test push functionality of the sync command
 
-  $ kitchensync() { RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
+  $ kitchensync() { RAYON_NUM_THREADS=1 $TESTDIR/../target/debug/kitchensync $* ; }
 
   $ mkdir a
   $ cd a
@@ -10,11 +10,11 @@ Test push functionality of the sync command
   $ touch -d 0 hello
   $ touch -d 0 world
 
-  $ kitchensync update | sort
+  $ kitchensync update
+  updating
   A hello
   A world
   update successful
-  updating
 
 Now push to a new directory
 

@@ -1,6 +1,6 @@
 Test duplicating files
 
-  $ kitchensync() { RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
+  $ kitchensync() { $TESTDIR/../target/debug/kitchensync $* ; }
 
   $ mkdir a
   $ cd a

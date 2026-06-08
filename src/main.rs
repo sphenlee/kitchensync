@@ -42,7 +42,7 @@ async fn main() -> ExitCode {
     match dispatch_command(args).await {
         Ok(code) => code,
         Err(e) => {
-            error!("{}", e);
+            error!("{:?}", e);
             ExitCode::FAILURE
         }
     }
