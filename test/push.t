@@ -10,11 +10,11 @@ Test push functionality of the sync command
   $ touch -d 0 hello
   $ touch -d 0 world
 
-  $ kitchensync update
-  updating
+  $ kitchensync update | sort
   A hello
   A world
   update successful
+  updating
 
 Now push to a new directory
 

@@ -1,6 +1,5 @@
 //#[macro_use] extern crate log;
 
-use anyhow::format_err;
 use clout::{self, error, info, status, success};
 
 mod config;
@@ -41,7 +40,7 @@ async fn main() -> ExitCode {
         .expect("error setting up clout");
 
     match dispatch_command(args).await {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(e) => {
             error!("{}", e);
             ExitCode::FAILURE
@@ -107,7 +106,7 @@ fn parse_args() -> clap::ArgMatches {
         .get_matches()
 }
 
-async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
+async fn dispatch_command(args: clap::ArgMatches) -> KResult<ExitCode> {
     let config = config::load()?;
 
     match args.subcommand() {
@@ -128,9 +127,10 @@ async fn dispatch_command(args: clap::ArgMatches) -> KResult<()> {
                     .map(|item| item.target.clone())
             });
 
-            let target = target.ok_or(format_err!(
-                "target must be specified on the command line, or provided in the config file"
-            ))?;
+            let Some(target) = target else {
+                error!("target must be specified on the command line, or provided in the config file");
+                return Ok(ExitCode::FAILURE);
+            };
 
             let opts = SyncOpts {
                 target,
@@ -148,7 +148,7 @@ pub struct UpdateOpts {
     deleted: bool,
 }
 
-fn do_update(opts: UpdateOpts) -> KResult<()> {
+fn do_update(opts: UpdateOpts) -> KResult<ExitCode> {
     status!("updating");
 
     let store = Store::read(KSYNC).unwrap_or_else(|_err| Store::empty());
@@ -163,7 +163,7 @@ fn do_update(opts: UpdateOpts) -> KResult<()> {
 
     success!("update successful");
 
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 struct SyncOpts {
@@ -173,7 +173,7 @@ struct SyncOpts {
     delete: bool,
 }
 
-async fn do_sync(opts: SyncOpts) -> KResult<()> {
+async fn do_sync(opts: SyncOpts) -> KResult<ExitCode> {
     // get the remote ksync file locally
     let remote = remote::from_location(&opts.target).await?;
 
@@ -192,9 +192,8 @@ async fn do_sync(opts: SyncOpts) -> KResult<()> {
     if got_remote_store {
         remote.get(ksync, ksyncremote).await?;
     } else if !opts.push {
-        return Err(format_err!(
-            "remote store not found, cannot perform a pull sync"
-        ));
+        error!("remote store not found, cannot perform a pull sync");
+        return Ok(ExitCode::FAILURE);
     }
 
     // read both stores
@@ -246,5 +245,5 @@ async fn do_sync(opts: SyncOpts) -> KResult<()> {
 
     success!("sync successful");
 
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }

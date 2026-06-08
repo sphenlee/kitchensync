@@ -126,6 +126,9 @@ pub fn update_store(opts: &UpdateOpts, mut store: Store, files: Vec<FileStat>) -
             status!("D {}", name.to_string_lossy());
         }
     } else {
+        if !store.files().is_empty() {
+            status!("(ignoring deleted files)");
+        }
         info!("re-add deleted files to the store");
         updated_store.files_mut().extend(store);
     }

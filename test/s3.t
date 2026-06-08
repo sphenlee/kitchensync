@@ -1,6 +1,6 @@
 Test s3 functionality
 
-  $ kitchensync() { RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
+  $ kitchensync() { RAYON_NUM_THREADS=1 RUST_BACKTRACE=1 $TESTDIR/../target/debug/kitchensync $* ; }
 
   $ mkdir a
   $ cd a
@@ -10,7 +10,7 @@ Test s3 functionality
   $ touch -d 2020-01-01T00:00:00 hello
   $ touch -d 2020-01-01T00:00:00 world
 
-  $ kitchensync update
+  $ kitchensync update | sort
   updating
   A hello
   A world

@@ -12,7 +12,7 @@ Tests basic functionality of the update command
 
 Initial update
 
-  $ kitchensync update
+  $ kitchensync update | sort
   updating
   A hello
   A world
