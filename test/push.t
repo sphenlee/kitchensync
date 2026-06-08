@@ -12,8 +12,8 @@ Test push functionality of the sync command
 
   $ kitchensync update
   updating
-  A hello
   A world
+  A hello
   update successful
 
 Now push to a new directory
@@ -22,8 +22,8 @@ Now push to a new directory
 
   $ kitchensync sync --push ../b
   syncing to ../b
-  A hello
   A world
+  A hello
   sync successful
 
   $ cat hello

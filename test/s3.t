@@ -20,6 +20,13 @@ Configure AWS
 
   $ export AWS_DEFAULT_REGION=us-east-1
 
+  $ aws sts get-caller-identity
+  {
+      "UserId": "[A-Z0-9]+",  (re)
+      "Account": "120228355863",
+      "Arn": "arn:aws:iam::120228355863:.*" (re)
+  }
+
 Now push to s3
 
   $ aws s3 rm --quiet --recursive s3://kitchensync-test/cram/b/
