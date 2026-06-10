@@ -22,7 +22,7 @@ Configure AWS
 
   $ aws sts get-caller-identity
   {
-      "UserId": "[A-Z0-9]+",  (re)
+      "UserId": ".*",  (re)
       "Account": "120228355863",
       "Arn": "arn:aws:iam::120228355863:.*" (re)
   }

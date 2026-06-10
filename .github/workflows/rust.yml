@@ -21,7 +21,24 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
           role-to-assume: arn:aws:iam::120228355863:role/kitchensync-github
-          aws-region: ap-southeast-2
+          aws-region: us-east-1
+
+
+      - name: Upload to S3 with detailed logging
+        env:
+          AWS_DEFAULT_OUTPUT: json
+        run: |
+          export AWS_DEFAULT_REGION=us-east-1
+          echo "Attempting S3 upload..."
+          touch tmp
+          aws s3 cp tmp s3://kitchensync-test/ --debug
+          
+          aws s3api put-object \
+            --bucket kitchensync-test \
+            --key test-file \
+            --body tmp \
+            --output json
+
 
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
