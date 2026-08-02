@@ -22,9 +22,9 @@ Configure AWS
 
   $ aws sts get-caller-identity
   {
-      "UserId": ".*",  (re)
+      "UserId": "[^"]*", (re)
       "Account": "120228355863",
-      "Arn": "arn:aws:iam::120228355863:.*" (re)
+      "Arn": "arn:aws:iam::120228355863:[^"]*" (re)
   }
 
 Now push to s3

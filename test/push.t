@@ -1,6 +1,7 @@
 Test push functionality of the sync command
 
   $ kitchensync() { RAYON_NUM_THREADS=1 $TESTDIR/../target/debug/kitchensync $* ; }
+  $ ksort() { RAYON_NUM_THREADS=1 $TESTDIR/../target/debug/sort_helper ; }
 
   $ mkdir a
   $ cd a
@@ -10,20 +11,20 @@ Test push functionality of the sync command
   $ touch -d 0 hello
   $ touch -d 0 world
 
-  $ kitchensync update
+  $ kitchensync update | ksort
   updating
-  A world
   A hello
+  A world
   update successful
 
 Now push to a new directory
 
   $ mkdir ../b
 
-  $ kitchensync sync --push ../b
+  $ kitchensync sync --push ../b | ksort
   syncing to ../b
-  A world
   A hello
+  A world
   sync successful
 
   $ cat hello
@@ -34,7 +35,7 @@ Make a change in a and update
   $ echo "hello world" > hello
   $ touch -d 1 hello
 
-  $ kitchensync update
+  $ kitchensync update | ksort
   updating
   U hello
   update successful

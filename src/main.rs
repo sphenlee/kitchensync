@@ -128,7 +128,9 @@ async fn dispatch_command(args: clap::ArgMatches) -> KResult<ExitCode> {
             });
 
             let Some(target) = target else {
-                error!("target must be specified on the command line, or provided in the config file");
+                error!(
+                    "target must be specified on the command line, or provided in the config file"
+                );
                 return Ok(ExitCode::FAILURE);
             };
 
